@@ -102,3 +102,75 @@ venv.bak/
 
 # mypy
 .mypy_cache/
+
+# Frontend dependencies and local build caches
+node_modules/
+*.tsbuildinfo
+
+# Local SQLite databases
+*.sqlite
+*.sqlite3
+*.db
+*.sqlite-journal
+*.sqlite-wal
+*.sqlite-shm
+*.sqlite3-journal
+*.sqlite3-wal
+*.sqlite3-shm
+*.db-journal
+*.db-wal
+*.db-shm
+
+# Local environment settings (keep sanitized examples and templates)
+.env.*
+!.env.example
+!.env.sample
+!.env.template
+!.env.*.example
+!.env.*.sample
+!.env.*.template
+
+# Local credentials and private keys
+.secrets/
+*.key
+*.pem
+*.p12
+*.pfx
+id_rsa
+id_ed25519
+
+# Additional Python / frontend caches and generated reports
+.ruff_cache/
+.nox/
+.vite/
+.vite-temp/
+.eslintcache
+coverage/
+test-results/
+playwright-report/
+dist-ssr/
+*.timestamp-*.mjs
+*.timestamp-*.js
+
+# Runtime logs and temporary files
+logs/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+*.tmp
+*.swp
+*.swo
+*~
+
+# Local editor and operating-system files
+.idea/
+.vscode/*
+!.vscode/extensions.json
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# Local coding-assistant settings and development prompts
+/.codex/
+/代码模型分步开发提示词.md

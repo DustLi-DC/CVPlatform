@@ -1,0 +1,1 @@
+"""CVPlatform backend application."""
