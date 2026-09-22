@@ -1,0 +1,355 @@
+/*
+ * 公共 UI 原语：原型中反复出现的按钮、卡片、标签、表单控件与表格样式。
+ * 只放跨页面复用的主题级样式；页面专属布局留在各组件的 scoped 样式里。
+ */
+
+/* ============ 卡片 ============ */
+.card {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+}
+
+.card-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 20px 24px 16px;
+  border-bottom: 1px solid var(--color-border-soft);
+}
+
+.card-title {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--color-text-strong);
+}
+
+.card-subtitle {
+  margin-top: 4px;
+  font-size: 12px;
+  color: var(--color-text-subtle);
+}
+
+.card-body {
+  padding: 20px 24px;
+}
+
+/* ============ 按钮 ============ */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 10px 16px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-md);
+  background: none;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+}
+
+.btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.btn-primary {
+  background: var(--color-primary);
+  color: #fff;
+}
+
+.btn-primary:hover:not(:disabled) {
+  background: var(--color-primary-hover);
+}
+
+.btn-secondary {
+  border-color: var(--color-border-strong);
+  color: var(--color-text-muted);
+  background: var(--color-surface);
+}
+
+.btn-secondary:hover:not(:disabled) {
+  background: var(--color-surface-muted);
+}
+
+.btn-danger {
+  background: var(--color-danger);
+  color: #fff;
+}
+
+.btn-danger:hover:not(:disabled) {
+  background: var(--color-danger-hover);
+}
+
+.btn-sm {
+  padding: 6px 10px;
+  font-size: 12px;
+}
+
+.btn-block {
+  width: 100%;
+}
+
+/* 表格内的文字型操作按钮 */
+.link-action {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--color-text-subtle);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.link-action:hover {
+  color: var(--color-primary);
+}
+
+.link-action-danger:hover {
+  color: var(--color-danger);
+}
+
+/* ============ 标签与徽标 ============ */
+.tag {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  border-radius: var(--radius-sm);
+  background: var(--color-neutral-bg);
+  color: var(--color-text-muted);
+  font-size: 11px;
+}
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border: 1px solid var(--color-neutral-border);
+  border-radius: var(--radius-sm);
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+.badge-ok {
+  background: var(--color-ok-bg);
+  border-color: var(--color-ok-border);
+  color: var(--color-ok-text);
+}
+
+.badge-warn {
+  background: var(--color-warn-bg);
+  border-color: var(--color-warn-border);
+  color: var(--color-warn-text);
+}
+
+.badge-danger {
+  background: var(--color-danger-bg);
+  border-color: var(--color-danger-border);
+  color: var(--color-danger-text);
+}
+
+.badge-neutral {
+  background: var(--color-neutral-bg);
+  border-color: var(--color-neutral-border);
+  color: var(--color-neutral-text);
+}
+
+.badge-primary {
+  background: var(--color-primary-soft);
+  border-color: var(--color-primary-soft-strong);
+  color: var(--color-primary);
+}
+
+/* 会议色点 */
+.conf-dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex: 0 0 auto;
+}
+
+/* ============ 表单控件 ============ */
+.field-label {
+  display: block;
+  margin-bottom: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--color-text-muted);
+}
+
+.input,
+.select,
+.textarea {
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  color: var(--color-text);
+  font: inherit;
+  font-size: 14px;
+}
+
+.textarea {
+  resize: vertical;
+}
+
+.input:focus,
+.select:focus,
+.textarea:focus {
+  border-color: var(--color-primary);
+  outline: none;
+  box-shadow: 0 0 0 3px var(--color-primary-soft-strong);
+}
+
+.input-invalid {
+  border-color: var(--color-danger-border);
+}
+
+.field-error {
+  margin-top: 4px;
+  font-size: 12px;
+  color: var(--color-danger-text);
+}
+
+.form-error {
+  padding: 10px 14px;
+  border: 1px solid var(--color-danger-border);
+  border-radius: var(--radius-md);
+  background: var(--color-danger-bg);
+  color: var(--color-danger-text);
+  font-size: 12px;
+}
+
+/* ============ 筛选 chips ============ */
+.chip-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 14px;
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  color: var(--color-text-subtle);
+  font-size: 14px;
+  cursor: pointer;
+  transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+}
+
+.chip-toggle:hover {
+  background: var(--color-surface-muted);
+}
+
+.chip-toggle.is-on {
+  border-color: var(--color-primary);
+  background: var(--color-primary-soft);
+  color: var(--color-primary);
+  font-weight: 600;
+}
+
+/* ============ 表格 ============ */
+.data-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 14px;
+}
+
+.data-table thead tr {
+  background: var(--color-surface-muted);
+  color: var(--color-text-subtle);
+  font-size: 12px;
+}
+
+.data-table th {
+  padding: 12px 16px;
+  font-weight: 600;
+  text-align: left;
+}
+
+.data-table td {
+  padding: 14px 16px;
+  vertical-align: top;
+}
+
+.data-table tbody tr {
+  border-top: 1px solid var(--color-border-soft);
+}
+
+.data-table tbody tr:hover {
+  background: rgb(248 250 252 / 70%);
+}
+
+/* 状态行底色：与状态画板一致 */
+.row-duplicate {
+  background: var(--color-warn-bg);
+}
+
+.row-failed {
+  background: var(--color-danger-bg);
+}
+
+/* ============ 提示条 ============ */
+.notice {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 12px 16px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface-muted);
+  font-size: 12px;
+  color: var(--color-text-muted);
+}
+
+.notice-warn {
+  border-color: var(--color-warn-border);
+  background: var(--color-warn-bg);
+  color: var(--color-warn-text);
+}
+
+.notice-danger {
+  border-color: var(--color-danger-border);
+  background: var(--color-danger-bg);
+  color: var(--color-danger-text);
+}
+
+.notice-ok {
+  border-color: var(--color-ok-border);
+  background: var(--color-ok-bg);
+  color: var(--color-ok-text);
+}
+
+.notice-info {
+  border-color: var(--color-primary-soft-strong);
+  background: var(--color-primary-soft);
+  color: var(--color-primary);
+}
+
+/* ============ 主内容区 ============ */
+.page-main {
+  padding: 32px 0 40px;
+}
+
+.page-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-top: 40px;
+  padding-top: 24px;
+  border-top: 1px solid var(--color-border);
+  font-size: 12px;
+  color: var(--color-text-subtle);
+}
+
+/* 窄窗口下页脚与双列卡片改为纵向排列 */
+@media (max-width: 900px) {
+  .page-footer {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+}
