@@ -181,3 +181,8 @@ Desktop.ini
 # Local stage working documents (kept out of the repository by design)
 /实施基线.md
 /开发设计与验收.md
+
+# Local development database and its backups
+# 开发默认数据库路径为 <仓库根>/data/（见 backend/app/config.py）；
+# 生产数据在 /var/lib/cvplatform，不经过仓库。
+/data/
