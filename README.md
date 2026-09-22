@@ -71,7 +71,7 @@ CVPlatform/
 |---|---|---|
 | `/` | 热门方向总览 | 后端接口 `/api/stats/{summary,top,graph}`（ECharts 图谱） |
 | `/trends` | 热度走势对比 | 后端接口 `/api/stats/{summary,trend,top}`（ECharts 曲线 + 播放动画） |
-| `/papers` | 论文管理 | 后端接口 `/api/papers` |
+| `/papers` | 论文管理 | 后端接口 `/api/papers`（主题下拉词表来自 `/api/stats/top`） |
 | `/papers/:id` | 论文详情 | 后端接口 `/api/papers/{id}` |
 | `/collect` | 采集与导入 | 后端接口 `/api/collect/*`、`/api/import/*` |
 | `/about` | 关于平台 | 后端接口 `/api/stats/coverage` + 静态说明 |

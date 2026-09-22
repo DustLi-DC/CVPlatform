@@ -174,3 +174,32 @@ def test_fuzzy_query_respects_stats_origin(client, temp_db: Path):
         params={"q": "目标检测", "keyword_origin": "system", "page_size": 50},
     ).json()
     assert scoped["total"] == 0
+
+
+def test_paper_keywords_include_topic_group(client, temp_db: Path):
+    """关键词标签要带主题分组：界面用它取分组配色（与图谱、榜单同一套色）。
+
+    只给主题名的话，前端得自己维护一份「主题 → 分组」映射，必然与主题表漂移。
+    """
+    paper_id = insert_paper(
+        temp_db,
+        code="CVPR-2024-0001",
+        title="Topic Group Paper For Keywords",
+        keyword_status="done",
+        keyword_ruleset_version=KEYWORD_RULESET_VERSION,
+    )
+    topic_id = insert_topic(
+        temp_db, slug="continual-learning", name="持续学习与增量学习", group_name="learning"
+    )
+    add_system_keyword(
+        temp_db, paper_id=paper_id, name="continual learning", topic_id=topic_id
+    )
+    add_system_keyword(temp_db, paper_id=paper_id, name="an unmapped keyword here")
+
+    body = client.get("/api/papers", params={"page_size": 1}).json()
+    keywords = {item["name"]: item for item in body["items"][0]["keywords"]}
+    assert keywords["continual learning"]["topic"] == "持续学习与增量学习"
+    assert keywords["continual learning"]["topic_group"] == "learning"
+    # 未归类关键词的分组为 null，界面按中性色展示
+    assert keywords["an unmapped keyword here"]["topic"] is None
+    assert keywords["an unmapped keyword here"]["topic_group"] is None

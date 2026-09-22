@@ -21,7 +21,9 @@ import PaperFormModal from '../components/PaperFormModal.vue'
 import StatusBadge from '../components/StatusBadge.vue'
 import YearRangeSelect from '../components/YearRangeSelect.vue'
 import { pushToast } from '../composables/useToast'
+import { fetchTop } from '../api/statsApi'
 import { useAvailableYears } from '../composables/useAvailableYears'
+import type { StatsItem } from '../types/stats'
 import {
   allConferences,
   conferenceColors,
@@ -40,6 +42,15 @@ const route = useRoute()
 const router = useRouter()
 
 const PAGE_SIZE = 8
+
+/**
+ * 主题可选词表来自统计接口（`/api/stats/top`）。
+ *
+ * 一次取全量、不带筛选范围：如果跟着当前筛选变化，选中一个主题后词表可能缩小，
+ * 出现「选过之后找不到刚才那项」的问题（年份下拉踩过同一个坑）。
+ * 只在挂载时请求一次。
+ */
+const topicOptions = ref<StatsItem[]>([])
 
 // 年份选项来自后端覆盖数据（不再使用演示常量），进入页面时加载一次
 const { years: availableYears, load: loadAvailableYears } = useAvailableYears()
@@ -264,6 +275,10 @@ watch(
     yearFrom,
     yearTo,
     keywordFilter,
+    // 主题与统计口径条件也必须触发重新加载：早先漏了这两项，
+    // 结果是从下拉选主题只改了地址栏与条件标签，列表还是原来的结果
+    topicFilter,
+    fromStats,
     sortField,
     sortOrder,
     page,
@@ -352,8 +367,29 @@ watch(
   },
 )
 
+/** 下拉选择主题时同步中文名：条件标签显示的是主题名而不是 slug */
+function onTopicSelect(): void {
+  const found = topicOptions.value.find((item) => item.key === topicFilter.value)
+  topicLabel.value = found?.name ?? ''
+  page.value = 1
+}
+
+async function loadTopicOptions(): Promise<void> {
+  try {
+    const data = await fetchTop(
+      { conferences: [], yearFrom: null, yearTo: null },
+      { limit: 200, excludeUnmapped: true },
+    )
+    topicOptions.value = data.items
+  } catch (error) {
+    // 词表取不到不影响检索：关键词输入框仍然可用
+    console.error('加载主题词表失败：', error)
+  }
+}
+
 onMounted(() => {
   void loadAvailableYears()
+  void loadTopicOptions()
   void load()
 })
 
@@ -423,18 +459,36 @@ onMounted(() => {
         />
 
         <div>
+          <label class="field-label" for="topic-filter">主题（可选词表）</label>
+          <select
+            id="topic-filter"
+            v-model="topicFilter"
+            class="select topic-filter-select"
+            @change="onTopicSelect"
+          >
+            <option value="">全部主题</option>
+            <option v-for="item in topicOptions" :key="item.key" :value="item.key">
+              {{ item.name }}（{{ item.count }} 篇）
+            </option>
+          </select>
+          <p class="field-hint">
+            词表来自统计接口的主题表（{{ topicOptions.length }} 个主题，括号内为当前库中的论文数），
+            只列出数据里真实存在的主题，选项随数据更新。
+          </p>
+        </div>
+
+        <div>
           <label class="field-label" for="kw-filter">关键词（精确匹配）</label>
           <input
             id="kw-filter"
             v-model="keywordFilter"
             class="input kw-input"
             type="text"
-            placeholder="例如：目标检测"
+            placeholder="例如：object detection"
             @keydown.enter="page = 1"
           />
           <p class="field-hint">
-            按关键词精确匹配。可选词表将在阶段 7 由统计接口提供，当前不做固定下拉，
-            避免列出数据中并不存在的词。
+            按系统抽取的原始关键词精确匹配（不经过主题归并）；做主题级筛选请用左侧的下拉。
           </p>
         </div>
 
@@ -904,6 +958,10 @@ onMounted(() => {
 .cell-year {
   font-size: 12px;
   color: var(--color-text-muted);
+}
+
+.topic-filter-select {
+  min-width: 200px;
 }
 
 .keyword-cell {
