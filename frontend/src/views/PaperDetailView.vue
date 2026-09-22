@@ -3,38 +3,41 @@
  * 页面 5 · 论文详情（对应原型 05_detail）。
  * 路径为 /papers/:id；原型用 detail.html?id=，此处用路径参数以便分享与刷新。
  *
+ * 已接入阶段 3 的真实接口：详情、同主题论文、编辑保存。
  * 关键词分「来源提供的关键词」与「系统提取的关键词」两块展示：前者只作展示，
  * 参与 Top 10 / 图谱 / 趋势统计的是后者经主题归并后的结果。
+ * 「所属方向热度」依赖统计接口（阶段 8），此处只呈现接入位置，不用演示数值填充。
  */
-import { computed, ref } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { RouterLink, useRoute, useRouter } from 'vue-router'
 
+import {
+  ApiError,
+  fetchPaper,
+  fetchRelatedPapers,
+} from '../api/paperApi'
 import DemoNotice from '../components/DemoNotice.vue'
 import KeywordTag from '../components/KeywordTag.vue'
 import PaperFormModal from '../components/PaperFormModal.vue'
 import StatusBadge from '../components/StatusBadge.vue'
-import { getPaper, relatedPapers } from '../demo/store'
 import {
-  demoConferenceYearSample,
-  demoTopicCount,
-  findDemoTopic,
-  topicGroupColors,
-} from '../demo/topics'
-import { conferenceColors, type Paper } from '../types/paper'
+  conferenceColors,
+  keywordBadgeFor,
+  type PaperDetail,
+  type PaperListItem,
+} from '../types/paper'
 
 const route = useRoute()
 const router = useRouter()
 
 const paperId = computed(() => Number(route.params.id))
-const paper = computed<Paper | undefined>(() => getPaper(paperId.value))
-const editOpen = ref(false)
-/** 保存后用于触发重新读取（演示库为响应式，此处只需触发模板重算） */
-const savedTick = ref(0)
 
-const related = computed(() => {
-  void savedTick.value
-  return relatedPapers(paperId.value)
-})
+const paper = ref<PaperDetail | null>(null)
+const related = ref<PaperListItem[]>([])
+const loading = ref(false)
+const loadError = ref('')
+const notFound = ref(false)
+const editOpen = ref(false)
 
 const sourceKeywordTags = computed(
   () => paper.value?.keywords.filter((keyword) => keyword.origin === 'author') ?? [],
@@ -48,39 +51,62 @@ const unmappedCount = computed(
   () => (paper.value?.keywords ?? []).filter((keyword) => !keyword.topic).length,
 )
 
-/** 该论文所属主题在所属会议年份的演示热度 */
-const topicHeat = computed(() => {
-  const target = paper.value
-  if (!target) return []
-  const topics = [
-    ...new Set(
-      target.keywords
-        .filter((keyword) => keyword.origin === 'system' && keyword.topic)
-        .map((keyword) => keyword.topic as string),
-    ),
-  ]
-  const sample = demoConferenceYearSample(target.conference, target.year)
-  return topics.map((topicName) => {
-    const topic = findDemoTopic(topicName)
-    const count = topic ? demoTopicCount(topic, target.conference, target.year) : null
-    return {
-      topicName,
-      group: topic ? topic.group : ('none' as const),
-      count,
-      sample,
-      share: sample && count !== null ? (count / sample) * 100 : null,
-    }
-  })
+/** 数据来源标识的名称汇总，用于详情页「数据来源」一行 */
+const sourceNames = computed(() => {
+  const sources = paper.value?.sources ?? []
+  return sources.length ? sources.map((item) => item.source).join('、') : '—'
 })
 
-function onSaved(): void {
-  savedTick.value += 1
+/** 该系统关键词已归并到主题的数量，用于说明统计口径的适用范围 */
+const mappedSystemCount = computed(
+  () =>
+    (paper.value?.keywords ?? []).filter(
+      (keyword) => keyword.origin === 'system' && keyword.topic,
+    ).length,
+)
+
+async function load(): Promise<void> {
+  if (!Number.isFinite(paperId.value) || paperId.value <= 0) {
+    notFound.value = true
+    return
+  }
+  loading.value = true
+  loadError.value = ''
+  notFound.value = false
+  try {
+    const detail = await fetchPaper(paperId.value)
+    paper.value = detail
+    // 同主题论文失败不影响主体内容展示
+    try {
+      related.value = await fetchRelatedPapers(paperId.value)
+    } catch {
+      related.value = []
+    }
+  } catch (error) {
+    paper.value = null
+    related.value = []
+    if (error instanceof ApiError && error.code === 'paper_not_found') {
+      notFound.value = true
+    } else {
+      loadError.value =
+        error instanceof ApiError ? error.message : '读取论文详情失败，请稍后重试。'
+    }
+  } finally {
+    loading.value = false
+  }
+}
+
+async function onSaved(): Promise<void> {
+  await load()
 }
 
 /** 点击关键词标签 → 按该关键词进入论文列表（与原型详情页的跳转一致） */
 function openKeyword(name: string): void {
   void router.push({ path: '/papers', query: { kw: name } })
 }
+
+// 详情之间跳转（相关论文）时重新加载
+watch(paperId, () => void load(), { immediate: true })
 </script>
 
 <template>
@@ -95,15 +121,30 @@ function openKeyword(name: string): void {
       <span class="crumb-current">论文详情</span>
     </nav>
 
-    <div v-if="!paper" class="card detail-missing">
+    <div v-if="loading" class="card detail-missing" role="status">
+      <p class="missing-title">正在加载论文详情…</p>
+    </div>
+
+    <div v-else-if="loadError" class="card detail-missing" role="alert">
+      <p class="missing-title">论文详情加载失败</p>
+      <p class="missing-desc">{{ loadError }}</p>
+      <div class="missing-actions">
+        <button type="button" class="btn btn-primary" @click="load">重试</button>
+        <RouterLink class="btn btn-secondary" :to="{ path: '/papers', query: route.query }">
+          返回论文列表
+        </RouterLink>
+      </div>
+    </div>
+
+    <div v-else-if="notFound" class="card detail-missing">
       <p class="missing-title">没有找到这篇论文</p>
       <p class="missing-desc">
-        演示库中没有编号为 {{ route.params.id }} 的记录，可能是链接有误或该记录已被删除。
+        论文库中没有编号为 {{ route.params.id }} 的记录，可能是链接有误或该记录已被删除。
       </p>
       <RouterLink class="btn btn-primary" to="/papers">返回论文列表</RouterLink>
     </div>
 
-    <template v-else>
+    <template v-else-if="paper">
       <div class="detail-grid">
         <div class="detail-main">
           <section class="card title-card">
@@ -119,25 +160,21 @@ function openKeyword(name: string): void {
                 </span>
                 <span class="badge badge-neutral code-badge">{{ paper.code }}</span>
                 <StatusBadge
-                  :display="paper.displayStatus"
-                  :keyword="
-                    paper.keywordStatus === 'done' && paper.systemKeywords.length === 0
-                      ? 'empty'
-                      : paper.keywordStatus
-                  "
+                  :display="paper.display_status"
+                  :keyword="keywordBadgeFor(paper)"
                 />
               </div>
               <h1 class="detail-title">{{ paper.title }}</h1>
-              <p v-if="paper.codeScopeMismatch" class="code-note">{{ paper.codeNote }}</p>
+              <p v-if="paper.code_scope_mismatch" class="code-note">{{ paper.code_note }}</p>
             </div>
             <div class="title-actions">
               <button type="button" class="btn btn-secondary" @click="editOpen = true">
                 编辑论文信息
               </button>
               <a
-                v-if="paper.landingUrl"
+                v-if="paper.landing_url"
                 class="btn btn-primary"
-                :href="paper.landingUrl"
+                :href="paper.landing_url"
                 target="_blank"
                 rel="noreferrer noopener"
               >
@@ -200,12 +237,16 @@ function openKeyword(name: string): void {
                   />
                 </template>
                 <span v-else class="keyword-empty">
-                  该论文的关键词处理结果为{{ paper.keywordStatus === 'done' ? '空' : '未完成' }}。
+                  该论文的关键词处理结果为{{ paper.keyword_status === 'done' ? '空' : '未完成' }}。
                   成功但为空仍计入分析分母，此处如实显示，不用占位词填充。
                 </span>
               </div>
               <p v-if="unmappedCount" class="keyword-unmapped">
-                其中 {{ unmappedCount }} 个关键词尚未归并到任何主题，已标注为「未归类」。
+                其中 {{ unmappedCount }} 个关键词尚未归并到任何主题，已标注为「未归类」；
+                主题归并表在阶段 6 由真实高频词产出后回填。
+              </p>
+              <p v-else-if="mappedSystemCount" class="keyword-unmapped">
+                已归并到 {{ mappedSystemCount }} 个主题，参与统计的是这些归并后的主题。
               </p>
             </div>
           </section>
@@ -215,29 +256,47 @@ function openKeyword(name: string): void {
             <dl class="source-grid">
               <div>
                 <dt>数据来源</dt>
-                <dd>{{ paper.sources.length ? paper.sources.map((item) => item.source).join('、') : '—' }}</dd>
+                <dd>{{ sourceNames }}</dd>
               </div>
               <div>
                 <dt>获取时间</dt>
-                <dd>{{ paper.retrievedAt ?? '—' }}</dd>
+                <dd>{{ paper.retrieved_at ?? '—' }}</dd>
               </div>
               <div>
                 <dt>原文链接</dt>
-                <dd>{{ paper.landingUrl ?? '—' }}</dd>
+                <dd>
+                  <a
+                    v-if="paper.landing_url"
+                    class="source-link"
+                    :href="paper.landing_url"
+                    target="_blank"
+                    rel="noreferrer noopener"
+                  >
+                    {{ paper.landing_url }}
+                  </a>
+                  <span v-else class="source-missing">缺失</span>
+                </dd>
               </div>
               <div>
                 <dt>最近更新</dt>
-                <dd>{{ paper.updatedAt ?? '—' }}</dd>
+                <dd>{{ paper.updated_at ?? '—' }}</dd>
               </div>
             </dl>
             <div v-if="paper.sources.length" class="source-ids">
-              <p v-for="item in paper.sources" :key="item.sourceId" class="source-id">
-                {{ item.source }} · {{ item.sourceId }}
+              <p
+                v-for="item in paper.sources"
+                :key="`${item.source}-${item.source_id}`"
+                class="source-id"
+              >
+                {{ item.source }} · {{ item.source_id }}
               </p>
             </div>
-            <DemoNotice class="source-notice" tone="warn">
-              本页摘要、关键词与来源信息为课程演示数据，仅用于界面核对；真实数据接入后，此处将显示实际来源与获取时间。
-            </DemoNotice>
+            <p v-else class="source-missing">
+              暂无可追溯的来源标识：该记录为手工录入，尚未通过采集接口写入来源信息。
+            </p>
+            <p v-if="!paper.landing_url" class="source-missing">
+              原文链接缺失时不影响关键词与统计，但无法从本页直接打开会议论文页。
+            </p>
           </section>
         </div>
 
@@ -259,43 +318,23 @@ function openKeyword(name: string): void {
               </div>
               <div>
                 <dt>数据状态</dt>
-                <dd>{{ paper.displayStatus }}</dd>
+                <dd>{{ paper.display_status }}</dd>
               </div>
               <div>
                 <dt>关键词状态</dt>
-                <dd>{{ paper.keywordStatus === 'done' && !paper.systemKeywords.length ? '已处理·空' : paper.keywordStatus }}</dd>
+                <dd>{{ keywordBadgeFor(paper) === 'empty' ? '已处理·空' : paper.keyword_status }}</dd>
               </div>
             </dl>
           </section>
 
           <section class="card side-card">
             <h2 class="side-title">该论文所属方向热度</h2>
-            <div v-if="topicHeat.length" class="heat-list">
-              <div v-for="item in topicHeat" :key="item.topicName" class="heat-item">
-                <div class="heat-head">
-                  <span class="heat-topic">
-                    <span
-                      class="legend-dot"
-                      :style="{ background: topicGroupColors[item.group] }"
-                      aria-hidden="true"
-                    ></span>
-                    {{ item.topicName }}
-                  </span>
-                  <span class="heat-share">
-                    {{ item.share === null ? '无可用数据' : `${item.share.toFixed(2)}%` }}
-                  </span>
-                </div>
-                <p class="heat-meta">
-                  <template v-if="item.sample === null">
-                    {{ paper.conference }} {{ paper.year }} 年没有纳入分析的样本
-                  </template>
-                  <template v-else>
-                    {{ item.count }} / {{ item.sample.toLocaleString('zh-CN') }} 篇（{{ paper.conference }} {{ paper.year }}）
-                  </template>
-                </p>
-              </div>
-            </div>
-            <p v-else class="side-empty">该论文暂无已归并到主题的系统关键词。</p>
+            <p class="side-empty">
+              所属方向热度需要统计接口，将在阶段 8 接入；本阶段不显示演示数值。
+            </p>
+            <p v-if="mappedSystemCount" class="side-hint">
+              该论文已有 {{ mappedSystemCount }} 个系统关键词归并到主题，届时可直接查看对应方向的热度与走势。
+            </p>
             <RouterLink class="btn btn-secondary btn-block side-action" to="/trends">
               查看热度走势对比
             </RouterLink>
@@ -308,16 +347,21 @@ function openKeyword(name: string): void {
                 v-for="item in related"
                 :key="item.id"
                 class="related-item"
-                :to="`/papers/${item.id}`"
+                :to="{ name: 'paper-detail', params: { id: item.id }, query: route.query }"
               >
                 <span class="line-2 related-title">{{ item.title }}</span>
-                <span class="related-meta">{{ item.conference }} {{ item.year }} · {{ item.code }}</span>
+                <span class="related-meta">
+                  {{ item.conference }} {{ item.year }} · {{ item.code }}
+                </span>
               </RouterLink>
               <p v-if="!related.length" class="side-empty">
-                暂无同主题论文；可在论文管理中补充采集。
+                暂无同主题论文。同主题关系依据系统关键词归并后的主题，主题表在阶段 6 回填；
+                在此之前为空属正常，可用「采集与导入」补充论文。
               </p>
             </div>
-            <RouterLink class="side-more" to="/papers">在论文管理中查看更多</RouterLink>
+            <RouterLink class="side-more" :to="{ path: '/papers', query: route.query }">
+              在论文管理中查看更多
+            </RouterLink>
           </section>
         </aside>
       </div>
@@ -378,6 +422,34 @@ function openKeyword(name: string): void {
 .missing-desc {
   margin: 8px 0 20px;
   font-size: 12px;
+  color: var(--color-text-subtle);
+}
+
+.missing-actions {
+  display: flex;
+  justify-content: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.source-link {
+  color: var(--color-primary);
+  word-break: break-all;
+}
+
+.source-link:hover {
+  text-decoration: underline;
+}
+
+.source-missing {
+  font-size: 12px;
+  color: var(--color-text-faint);
+}
+
+.side-hint {
+  margin-top: 8px;
+  font-size: 12px;
+  line-height: 1.7;
   color: var(--color-text-subtle);
 }
 

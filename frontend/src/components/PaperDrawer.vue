@@ -2,11 +2,21 @@
 /**
  * 关键词相关论文抽屉（原型首页右侧 440px 抽屉）。
  * 展示当前范围内的相关论文数、占比、共现最强主题与示例论文，并携带筛选条件进入列表。
+ *
+ * 数据来源：首页在阶段 8 接入统计接口前使用演示数据，因此这里只约定渲染所需的最小字段，
+ * 不绑定论文接口的完整类型；阶段 8 换成 `GET /api/stats/keyword/{name}/papers` 时无需改动本组件。
  */
 import { onBeforeUnmount, watch } from 'vue'
 import { RouterLink } from 'vue-router'
 
-import type { Paper } from '../types/paper'
+/** 抽屉渲染示例论文所需的最小字段，论文列表项与演示数据都满足该结构 */
+export interface DrawerPaperRef {
+  id: number
+  code: string
+  title: string
+  conference: string
+  year: number
+}
 
 const props = defineProps<{
   open: boolean
@@ -17,7 +27,7 @@ const props = defineProps<{
   share: number | null
   /** 共现最强的主题（最多 4 个） */
   coTopics: { name: string; weight: number }[]
-  papers: Paper[]
+  papers: DrawerPaperRef[]
   /** 进入论文列表时保留的筛选条件 */
   listQuery: Record<string, string>
 }>()
@@ -109,7 +119,9 @@ function shareText(): string {
               :to="`/papers/${paper.id}`"
             >
               <span class="line-2 drawer-paper-title">{{ paper.title }}</span>
-              <span class="drawer-paper-meta">{{ paper.conference }} {{ paper.year }} · {{ paper.code }}</span>
+              <span class="drawer-paper-meta">
+                {{ paper.conference }} {{ paper.year }} · {{ paper.code }}
+              </span>
             </RouterLink>
             <p v-if="!papers.length" class="drawer-empty">
               该方向暂无示例论文，可在论文管理中补充采集。

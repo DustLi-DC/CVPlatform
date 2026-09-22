@@ -2,15 +2,16 @@
 /**
  * 页面 3 · 论文列表管理（对应原型 03_papers）。
  *
- * 已实现：搜索（精确/模糊）、会议与年份区间筛选、关键词筛选、已生效条件、排序、
- * 分页、新增/编辑/删除（含本地校验与去重冲突提示）、本地未命中面板。
+ * 已接入阶段 3 的真实接口：列表、精确/模糊搜索、会议与年份区间筛选、关键词筛选、
+ * 排序、分页、新增/编辑/删除（含确认）。
  *
- * 尚未接入后端：数据来自内存演示库，写入提示中明确说明“仅在本页内存中生效”；
- * 联网检索在阶段 5 接入，此处只呈现状态与禁用原因，不模拟进度。
+ * 状态覆盖：加载中、接口失败（带重试）、空库、无结果、以及「本地未命中」面板
+ * （联网检索在阶段 5 接入，这里只保留接入位置与禁用原因，不模拟检索过程）。
  */
-import { computed, ref, watch } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { RouterLink, useRoute, useRouter } from 'vue-router'
 
+import { ApiError, deletePaper, fetchPaper, listPapers } from '../api/paperApi'
 import AppModal from '../components/AppModal.vue'
 import EmptyState from '../components/EmptyState.vue'
 import KeywordTag from '../components/KeywordTag.vue'
@@ -19,24 +20,27 @@ import Pagination from '../components/Pagination.vue'
 import PaperFormModal from '../components/PaperFormModal.vue'
 import StatusBadge from '../components/StatusBadge.vue'
 import YearRangeSelect from '../components/YearRangeSelect.vue'
-import { NOT_CONNECTED_NOTICE, demoYears } from '../demo/coverage'
-import { deletePaper, getPaper, paperStore, queryPapers, resetDemoPapers } from '../demo/store'
-import { demoKeywordOptions } from '../demo/topics'
 import { pushToast } from '../composables/useToast'
+import { demoYears } from '../demo/coverage'
+import { demoKeywordOptions } from '../demo/topics'
 import {
   allConferences,
   conferenceColors,
-  displayStatusLabels,
-  keywordStatusLabels,
+  keywordBadgeFor,
   type Conference,
   type MatchMode,
-  type Paper,
+  type PaperDetail,
+  type PaperListItem,
+  type PaperPage,
+  type PaperQuery,
   type PaperSortField,
   type SortOrder,
 } from '../types/paper'
 
 const route = useRoute()
 const router = useRouter()
+
+const PAGE_SIZE = 8
 
 const query = ref('')
 const matchMode = ref<MatchMode>('fuzzy')
@@ -47,37 +51,37 @@ const keywordFilter = ref('')
 const sortField = ref<PaperSortField>('code')
 const sortOrder = ref<SortOrder>('asc')
 const page = ref(1)
-const pageSize = 8
 
-const formOpen = ref(false)
-const editingPaper = ref<Paper | null>(null)
-const deletingPaper = ref<Paper | null>(null)
-
-/** 提交查询后才生效的语句，切换筛选不会误触发联网检索（与原型一致） */
+/** 提交查询后才生效的语句，仅切换筛选不会触发检索（与原型一致） */
 const submittedQuery = ref('')
 
-const result = computed(() =>
-  queryPapers({
-    q: submittedQuery.value,
-    match: matchMode.value,
-    conferences: selectedConferences.value,
-    yearFrom: yearFrom.value,
-    yearTo: yearTo.value,
-    keyword: keywordFilter.value,
-    topic: '',
-    page: page.value,
-    pageSize,
-    sort: sortField.value,
-    order: sortOrder.value,
-  }),
+const pageData = ref<PaperPage | null>(null)
+const loading = ref(false)
+const loadError = ref('')
+const loadErrorRetryable = ref(true)
+
+const formOpen = ref(false)
+const editingPaper = ref<PaperDetail | null>(null)
+const deletingPaper = ref<PaperListItem | null>(null)
+const deleteSubmitting = ref(false)
+
+const items = computed(() => pageData.value?.items ?? [])
+const total = computed(() => pageData.value?.total ?? 0)
+const pages = computed(() => pageData.value?.pages ?? 1)
+
+/** 完全没有任何筛选与查询条件，用于区分「空库」与「无结果」 */
+const hasAnyCondition = computed(
+  () =>
+    Boolean(submittedQuery.value) ||
+    selectedConferences.value.length > 0 ||
+    yearFrom.value !== null ||
+    yearTo.value !== null ||
+    Boolean(keywordFilter.value),
 )
 
-/** 演示库中的记录总数（与当前筛选无关），用于页脚说明 */
-const totalRecords = computed(() => paperStore.papers.value.length)
-
-/** 本地未命中：提交过查询、但当前条件（不含筛选）下没有结果 */
+/** 本地未命中：提交过查询但没有任何结果，此时给出联网检索入口的位置 */
 const localMiss = computed(
-  () => Boolean(submittedQuery.value) && result.value.total === 0,
+  () => Boolean(submittedQuery.value) && total.value === 0 && !loading.value && !loadError.value,
 )
 
 const activeFilters = computed(() => {
@@ -96,6 +100,46 @@ const activeFilters = computed(() => {
   if (keywordFilter.value) chips.push({ key: 'keyword', label: `关键词：${keywordFilter.value}` })
   return chips
 })
+
+function buildQuery(): PaperQuery {
+  return {
+    q: submittedQuery.value,
+    match: matchMode.value,
+    conferences: selectedConferences.value,
+    yearFrom: yearFrom.value,
+    yearTo: yearTo.value,
+    keyword: keywordFilter.value,
+    topic: '',
+    dataStatus: '',
+    keywordStatus: '',
+    sort: sortField.value,
+    order: sortOrder.value,
+    page: page.value,
+    pageSize: PAGE_SIZE,
+  }
+}
+
+async function load(): Promise<void> {
+  loading.value = true
+  loadError.value = ''
+  try {
+    const data = await listPapers(buildQuery())
+    pageData.value = data
+    // 服务端会把越界页码收敛到最后一页，这里同步过来，避免地址栏与页面不一致
+    if (data.page !== page.value) page.value = data.page
+  } catch (error) {
+    pageData.value = null
+    if (error instanceof ApiError) {
+      loadError.value = error.message
+      loadErrorRetryable.value = error.isRetryable
+    } else {
+      loadError.value = '加载论文列表失败，请稍后重试。'
+      loadErrorRetryable.value = true
+    }
+  } finally {
+    loading.value = false
+  }
+}
 
 function clearFilter(key: string): void {
   if (key === 'query') {
@@ -135,9 +179,17 @@ function openCreate(): void {
   formOpen.value = true
 }
 
-function openEdit(paper: Paper): void {
-  editingPaper.value = paper
-  formOpen.value = true
+async function openEdit(paper: PaperListItem): Promise<void> {
+  // 编辑需要摘要与作者关键词，列表项不含这些字段，按 id 重新取详情
+  try {
+    editingPaper.value = await fetchPaper(paper.id)
+    formOpen.value = true
+  } catch (error) {
+    pushToast(
+      error instanceof ApiError ? error.message : '读取论文详情失败，请稍后重试。',
+      'warning',
+    )
+  }
 }
 
 function onSaved(): void {
@@ -147,20 +199,30 @@ function onSaved(): void {
     query.value = ''
     submittedQuery.value = ''
   }
+  void load()
 }
 
-function confirmDelete(): void {
+async function confirmDelete(): Promise<void> {
   const target = deletingPaper.value
-  if (!target) return
-  deletePaper(target.id)
-  deletingPaper.value = null
-  const shortTitle = target.title.length > 18 ? `${target.title.slice(0, 18)}…` : target.title
-  pushToast(`已删除《${shortTitle}》。${NOT_CONNECTED_NOTICE}`, 'neutral')
-}
+  if (!target || deleteSubmitting.value) return
 
-function keywordStatusOf(paper: Paper): 'done' | 'pending' | 'running' | 'failed' | 'empty' {
-  if (paper.keywordStatus === 'done' && paper.systemKeywords.length === 0) return 'empty'
-  return paper.keywordStatus
+  deleteSubmitting.value = true
+  try {
+    await deletePaper(target.id)
+    deletingPaper.value = null
+    // 删掉当前页最后一条时回退一页，避免停在空页上
+    if (items.value.length === 1 && page.value > 1) page.value -= 1
+    await load()
+    const shortTitle = target.title.length > 18 ? `${target.title.slice(0, 18)}…` : target.title
+    pushToast(`已删除《${shortTitle}》。`)
+  } catch (error) {
+    pushToast(
+      error instanceof ApiError ? error.message : '删除失败，请稍后重试。',
+      'warning',
+    )
+  } finally {
+    deleteSubmitting.value = false
+  }
 }
 
 function onKeywordClick(name: string): void {
@@ -168,55 +230,90 @@ function onKeywordClick(name: string): void {
   page.value = 1
 }
 
-function resetDemoData(): void {
-  resetDemoPapers()
-  resetAll()
-  pushToast('已重置为初始演示数据。', 'neutral')
-}
-
-// 支持从首页/趋势页带条件进入，并完整保留年份区间
+// 条件或页码变化即重新加载
 watch(
-  () => route.query,
-  (params) => {
-    const kw = params.kw
-    if (typeof kw === 'string' && kw) keywordFilter.value = kw
-    const conf = params.conf
-    if (typeof conf === 'string' && conf) {
-      const parsed = conf.split(',').filter((item): item is Conference =>
-        (allConferences as string[]).includes(item),
-      )
-      if (parsed.length) selectedConferences.value = parsed
-    }
-    const from = Number(params.year_from)
-    if (Number.isFinite(from) && from > 0) yearFrom.value = from
-    const to = Number(params.year_to)
-    if (Number.isFinite(to) && to > 0) yearTo.value = to
-    const q = params.query
-    if (typeof q === 'string' && q) {
-      query.value = q
-      submittedQuery.value = q
-    }
-    page.value = 1
+  [
+    submittedQuery,
+    matchMode,
+    selectedConferences,
+    yearFrom,
+    yearTo,
+    keywordFilter,
+    sortField,
+    sortOrder,
+    page,
+  ],
+  () => {
+    void load()
   },
-  { immediate: true },
 )
 
-/** 详情页返回时保留条件：把当前条件写回地址栏，供返回与分享使用 */watch([selectedConferences, yearFrom, yearTo, keywordFilter, submittedQuery], () => {
+/**
+ * 把地址栏条件同步到本地状态。
+ *
+ * 只在值确实不同时赋值：否则 URL 写回与状态同步会互相触发，产生重复请求。
+ */
+function applyRouteQuery(params: typeof route.query): void {
+  const kw = typeof params.kw === 'string' ? params.kw : ''
+  if (kw !== keywordFilter.value) keywordFilter.value = kw
+
+  const confRaw = typeof params.conf === 'string' ? params.conf : ''
+  const parsed = confRaw
+    .split(',')
+    .filter((item): item is Conference => (allConferences as string[]).includes(item))
+  if (parsed.join(',') !== selectedConferences.value.join(',')) selectedConferences.value = parsed
+
+  const from = Number(params.year_from)
+  const nextFrom = Number.isFinite(from) && from > 0 ? from : null
+  if (nextFrom !== yearFrom.value) yearFrom.value = nextFrom
+
+  const to = Number(params.year_to)
+  const nextTo = Number.isFinite(to) && to > 0 ? to : null
+  if (nextTo !== yearTo.value) yearTo.value = nextTo
+
+  const q = typeof params.query === 'string' ? params.query : ''
+  if (q !== submittedQuery.value) {
+    query.value = q
+    submittedQuery.value = q
+  }
+
+  const pageParam = Number(params.page)
+  const nextPage = Number.isFinite(pageParam) && pageParam > 0 ? pageParam : 1
+  if (nextPage !== page.value) page.value = nextPage
+}
+
+// 首次进入：先用地址栏条件初始化状态（此时 watcher 尚未建立，不会触发请求），
+// 再由 onMounted 发起唯一一次列表请求。
+applyRouteQuery(route.query)
+
+// 浏览器前进/后退或外部跳转带着新条件回来时同步状态；状态变化由上面的 watcher 触发加载
+watch(() => route.query, applyRouteQuery)
+
+// 把当前条件与页码写回地址栏，使详情页返回、刷新与分享都能还原同一视图
+watch([submittedQuery, selectedConferences, yearFrom, yearTo, keywordFilter, page], () => {
   const next: Record<string, string> = {}
   if (submittedQuery.value) next.query = submittedQuery.value
   if (selectedConferences.value.length) next.conf = selectedConferences.value.join(',')
   if (yearFrom.value !== null) next.year_from = String(yearFrom.value)
   if (yearTo.value !== null) next.year_to = String(yearTo.value)
   if (keywordFilter.value) next.kw = keywordFilter.value
+  if (page.value > 1) next.page = String(page.value)
+
   const current = route.query
   const same =
     current.query === next.query &&
     current.conf === next.conf &&
     current.year_from === next.year_from &&
     current.year_to === next.year_to &&
-    current.kw === next.kw
+    current.kw === next.kw &&
+    current.page === next.page
   if (!same) void router.replace({ query: next })
 })
+
+onMounted(() => {
+  void load()
+})
+
 </script>
 
 <template>
@@ -227,8 +324,8 @@ watch(
       description="集中查询已采集的论文。支持按题目、编号、关键词搜索；本地论文库没有匹配结果时，可以按当前查询语句联网查找并导入。"
     >
       <template #aside>
-        <button type="button" class="btn btn-secondary" @click="resetDemoData">
-          重置演示数据
+        <button type="button" class="btn btn-secondary" :disabled="loading" @click="load">
+          刷新
         </button>
         <button type="button" class="btn btn-primary" @click="openCreate">新增论文</button>
         <RouterLink class="btn btn-secondary" to="/collect">批量导入</RouterLink>
@@ -255,10 +352,10 @@ watch(
           <legend class="field-label">匹配方式</legend>
           <div class="mode-options">
             <label class="mode-option">
-              <input v-model="matchMode" type="radio" value="fuzzy" />模糊匹配
+              <input v-model="matchMode" name="match-mode" type="radio" value="fuzzy" />模糊匹配
             </label>
             <label class="mode-option">
-              <input v-model="matchMode" type="radio" value="exact" />精确匹配
+              <input v-model="matchMode" name="match-mode" type="radio" value="exact" />精确匹配
             </label>
           </div>
         </fieldset>
@@ -267,11 +364,9 @@ watch(
           <span class="field-label">会议</span>
           <div class="conf-checks">
             <label v-for="conference in allConferences" :key="conference" class="mode-option">
-              <input
-                v-model="selectedConferences"
-                type="checkbox"
-                :value="conference"
-              />{{ conference }}
+              <input v-model="selectedConferences" type="checkbox" :value="conference" />{{
+                conference
+              }}
             </label>
           </div>
         </div>
@@ -295,15 +390,17 @@ watch(
         </div>
 
         <div>
-          <label class="field-label" for="sort-field">排序</label>
+          <span class="field-label">排序</span>
           <div class="sort-controls">
+            <label class="visually-hidden" for="sort-field">排序字段</label>
             <select id="sort-field" v-model="sortField" class="select">
               <option value="code">编号</option>
               <option value="title">题目</option>
               <option value="year">年份</option>
               <option value="conference">会议</option>
             </select>
-            <select v-model="sortOrder" class="select">
+            <label class="visually-hidden" for="sort-order">排序方向</label>
+            <select id="sort-order" v-model="sortOrder" class="select">
               <option value="asc">升序</option>
               <option value="desc">降序</option>
             </select>
@@ -330,11 +427,28 @@ watch(
         <span v-else class="filter-empty">未设置筛选条件，显示全部论文</span>
       </div>
       <div class="result-count">
-        共 <strong>{{ result.total }}</strong> 条结果
+        <template v-if="loading">加载中…</template>
+        <template v-else-if="loadError">—</template>
+        <template v-else>共 <strong>{{ total }}</strong> 条结果</template>
       </div>
     </div>
 
-    <section v-if="localMiss" class="local-miss">
+    <!-- 接口失败：区分可重试与不可重试，给出明确原因 -->
+    <section v-if="loadError" class="card error-panel" role="alert">
+      <p class="error-title">论文列表加载失败</p>
+      <p class="error-desc">{{ loadError }}</p>
+      <div class="error-actions">
+        <button v-if="loadErrorRetryable" type="button" class="btn btn-primary" @click="load">
+          重试
+        </button>
+        <button v-else type="button" class="btn btn-secondary" @click="resetAll">
+          清空查询条件
+        </button>
+      </div>
+    </section>
+
+    <!-- 本地未命中：预留联网检索的接入位置 -->
+    <section v-else-if="localMiss" class="local-miss">
       <div class="miss-main">
         <p class="miss-title">本地论文库没有匹配结果</p>
         <p class="miss-desc">
@@ -348,8 +462,11 @@ watch(
       </div>
     </section>
 
-    <section class="card table-card">
-      <table v-if="result.items.length" class="data-table">
+    <!-- 有查询但无结果时，由上面的「本地未命中」面板承担提示，不再重复显示通用空状态 -->
+    <section v-if="!localMiss" class="card table-card">
+      <div v-if="loading" class="loading-panel" role="status">正在加载论文列表…</div>
+
+      <table v-else-if="items.length" class="data-table">
         <thead>
           <tr>
             <th class="col-code">编号</th>
@@ -362,13 +479,17 @@ watch(
           </tr>
         </thead>
         <tbody>
-          <tr v-for="paper in result.items" :key="paper.id">
+          <tr v-for="paper in items" :key="paper.id">
             <td class="cell-code">{{ paper.code }}</td>
             <td>
-              <RouterLink class="paper-title line-2" :to="`/papers/${paper.id}`" :title="paper.title">
+              <RouterLink
+                class="paper-title line-2"
+                :to="{ name: 'paper-detail', params: { id: paper.id }, query: route.query }"
+                :title="paper.title"
+              >
                 {{ paper.title }}
               </RouterLink>
-              <p v-if="paper.codeScopeMismatch" class="code-note">{{ paper.codeNote }}</p>
+              <p v-if="paper.code_scope_mismatch" class="code-note">{{ paper.code_note }}</p>
             </td>
             <td>
               <span class="conf-cell">
@@ -397,10 +518,7 @@ watch(
               </div>
             </td>
             <td>
-              <StatusBadge
-                :display="paper.displayStatus"
-                :keyword="keywordStatusOf(paper)"
-              />
+              <StatusBadge :display="paper.display_status" :keyword="keywordBadgeFor(paper)" />
             </td>
             <td>
               <div class="row-actions">
@@ -419,22 +537,33 @@ watch(
       </table>
 
       <EmptyState
+        v-else-if="!hasAnyCondition"
+        title="论文库还没有记录"
+        description="可以通过新增论文手工录入，或到「采集与导入」用完整题目采集、批量导入列表。"
+      >
+        <button type="button" class="btn btn-primary" @click="openCreate">新增论文</button>
+        <RouterLink class="btn btn-secondary" to="/collect">去采集与导入</RouterLink>
+      </EmptyState>
+
+      <EmptyState
         v-else
         title="当前条件下没有论文"
-        description="可以调整查询与筛选条件，或新增论文、使用批量导入补充数据。"
-      />
+        description="可以调整查询与筛选条件，或清空条件后浏览全部论文。"
+      >
+        <button type="button" class="btn btn-secondary" @click="resetAll">清空条件</button>
+      </EmptyState>
 
       <Pagination
-        v-if="result.items.length"
+        v-if="!loading && items.length"
         v-model:page="page"
-        :pages="result.pages"
-        :total="result.total"
-        :page-size-hint="`每页 ${pageSize} 条`"
+        :pages="pages"
+        :total="total"
+        :page-size-hint="`每页 ${PAGE_SIZE} 条`"
       />
     </section>
 
     <p class="table-footnote">
-      当前共 {{ totalRecords }} 条演示记录；表格数值与题目以外的字段均来自演示数据，未接入后端。
+      列表数据来自后端接口 <code>/api/papers</code>，与会话内的数据库一致；本页不含演示数据。
     </p>
 
     <PaperFormModal
@@ -448,20 +577,33 @@ watch(
       :open="Boolean(deletingPaper)"
       title="确认删除这篇论文？"
       width="460px"
+      :close-on-backdrop="!deleteSubmitting"
       @close="deletingPaper = null"
     >
       <template v-if="deletingPaper">
         <p class="delete-title">{{ deletingPaper.title }}</p>
         <p class="delete-code">{{ deletingPaper.code }}</p>
         <p class="delete-note">
-          删除后该论文将从本地论文库移除，相关关键词统计会在下次刷新时重新计算。
+          删除后该论文将从论文库移除，关联的关键词与来源记录一并清理，关键词统计会在下次刷新时重新计算。
         </p>
       </template>
       <template #footer>
-        <button type="button" class="btn btn-secondary" @click="deletingPaper = null">
+        <button
+          type="button"
+          class="btn btn-secondary"
+          :disabled="deleteSubmitting"
+          @click="deletingPaper = null"
+        >
           取消
         </button>
-        <button type="button" class="btn btn-danger" @click="confirmDelete">确认删除</button>
+        <button
+          type="button"
+          class="btn btn-danger"
+          :disabled="deleteSubmitting"
+          @click="confirmDelete"
+        >
+          {{ deleteSubmitting ? '删除中…' : '确认删除' }}
+        </button>
       </template>
     </AppModal>
   </div>
@@ -575,6 +717,30 @@ watch(
   color: var(--color-text-subtle);
 }
 
+.error-panel {
+  margin-bottom: 20px;
+  padding: 20px 24px;
+}
+
+.error-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--color-danger-text);
+}
+
+.error-desc {
+  margin-top: 6px;
+  font-size: 12px;
+  line-height: 1.7;
+  color: var(--color-danger-text);
+}
+
+.error-actions {
+  display: flex;
+  gap: 12px;
+  margin-top: 16px;
+}
+
 .local-miss {
   display: flex;
   align-items: flex-start;
@@ -617,6 +783,13 @@ watch(
   overflow: hidden;
 }
 
+.loading-panel {
+  padding: 64px 24px;
+  text-align: center;
+  font-size: 14px;
+  color: var(--color-text-subtle);
+}
+
 .col-code {
   width: 130px;
 }
@@ -634,7 +807,7 @@ watch(
 }
 
 .col-status {
-  width: 130px;
+  width: 150px;
 }
 
 .col-actions {
@@ -700,6 +873,10 @@ watch(
   color: var(--color-text-subtle);
 }
 
+.table-footnote code {
+  font-family: var(--font-mono);
+}
+
 .delete-title {
   font-size: 14px;
   color: var(--color-text);
@@ -732,6 +909,10 @@ watch(
 
 @media (max-width: 900px) {
   .search-row {
+    flex-wrap: wrap;
+  }
+
+  .error-actions {
     flex-wrap: wrap;
   }
 

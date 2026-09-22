@@ -17,7 +17,7 @@ import RankBarList, { type RankItem } from '../components/RankBarList.vue'
 import StatCard from '../components/StatCard.vue'
 import YearRangeSelect from '../components/YearRangeSelect.vue'
 import { DEMO_SUFFIX, demoCoverage, demoYearFirst, demoYearLast, demoYears } from '../demo/coverage'
-import { demoPapers } from '../demo/papers'
+import { demoDrawerPapers } from '../demo/papers'
 import {
   demoConferenceYearSample,
   demoGraphEdges,
@@ -157,13 +157,8 @@ const drawerCoTopics = computed(() => {
 
 const drawerPapers = computed(() => {
   if (!activeTopic.value) return []
-  return demoPapers
-    .filter((paper) =>
-      paper.keywords.some(
-        (keyword) => keyword.name === activeTopic.value || keyword.topic === activeTopic.value,
-      ),
-    )
-    .slice(0, 3)
+  // 演示数据里按主题归属挑示例论文；阶段 8 起改用统计接口返回的真实关联论文
+  return demoDrawerPapers.filter((paper) => paper.topics.includes(activeTopic.value)).slice(0, 3)
 })
 
 const drawerQuery = computed(() => ({

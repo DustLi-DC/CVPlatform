@@ -1,27 +1,30 @@
 <script setup lang="ts">
 /**
- * 新增 / 编辑论文弹窗（对应原型的“新增论文”与“编辑论文信息”弹窗）。
+ * 新增 / 编辑论文弹窗（对应原型的「新增论文」与「编辑论文信息」弹窗）。
  *
- * 本阶段尚未接入后端：保存写入的是内存演示库，因此提交后提示中明确说明“仅在本页
- * 内存中生效”。校验规则与阶段 3 后端保持一致（题目必填、归一后长度 ≥ 8、去重键冲突）。
+ * 已接入阶段 3 的真实接口：
+ * - 保存失败（含重复冲突、参数错误、网络失败）时**不关闭弹窗、不清空输入**，
+ *   只在弹窗内提示原因，用户可以直接改完重试；
+ * - 提交期间按钮进入提交中状态并禁止重复点击；
+ * - 编号由服务端分配，表单内只读展示，编辑时也不允许修改。
  */
 import { computed, ref, watch } from 'vue'
 
+import { ApiError, createPaper, updatePaper } from '../api/paperApi'
 import { pushToast } from '../composables/useToast'
-import { createPaper, DuplicatePaperError, updatePaper } from '../demo/store'
-import { NOT_CONNECTED_NOTICE, demoYearLast, demoYears } from '../demo/coverage'
-import { allConferences, type Conference, type Paper } from '../types/paper'
+import { demoYears } from '../demo/coverage'
+import { allConferences, type Conference, type PaperDetail } from '../types/paper'
 import AppModal from './AppModal.vue'
 
 const props = defineProps<{
   open: boolean
   /** 传入论文表示编辑，传 null 表示新增 */
-  paper: Paper | null
+  paper: PaperDetail | null
 }>()
 
 const emit = defineEmits<{
   close: []
-  saved: [paper: Paper]
+  saved: [paper: PaperDetail]
 }>()
 
 interface FormState {
@@ -37,12 +40,13 @@ interface FormState {
 
 const form = ref<FormState>(emptyForm())
 const errorText = ref('')
+const submitting = ref(false)
 
 function emptyForm(): FormState {
   return {
     code: '',
     conference: 'CVPR',
-    year: demoYearLast,
+    year: demoYears[demoYears.length - 1] ?? 2025,
     title: '',
     keywordsText: '',
     abstract: '',
@@ -58,16 +62,17 @@ watch(
   (open) => {
     if (!open) return
     errorText.value = ''
+    submitting.value = false
     if (props.paper) {
       form.value = {
         code: props.paper.code,
         conference: props.paper.conference,
         year: props.paper.year,
         title: props.paper.title,
-        keywordsText: props.paper.sourceKeywords.join(', '),
+        keywordsText: props.paper.source_keywords.join(', '),
         abstract: props.paper.abstract ?? '',
-        landingUrl: props.paper.landingUrl ?? '',
-        pdfUrl: props.paper.pdfUrl ?? '',
+        landingUrl: props.paper.landing_url ?? '',
+        pdfUrl: props.paper.pdf_url ?? '',
       }
       return
     }
@@ -82,6 +87,7 @@ function parseKeywords(text: string): string[] {
     .filter(Boolean)
 }
 
+/** 本地校验与后端保持一致：题目必填、长度不足 8 视为不完整题目 */
 function validate(): string {
   const titleValue = form.value.title.trim()
   if (!titleValue) return '论文题目不能为空，请先填写题目再保存。'
@@ -90,7 +96,24 @@ function validate(): string {
   return ''
 }
 
-function onSubmit(): void {
+function describeError(error: unknown): string {
+  if (error instanceof ApiError) {
+    if (error.code === 'duplicate_paper' && error.existing) {
+      const existing = error.existing
+      return `该论文已存在：${existing.code}《${existing.title}》。会议、年份与题目相同的记录不允许重复入库，可改为编辑已有记录。`
+    }
+    if (error.fields.length) {
+      return error.fields
+        .map((item) => (item.field ? `${item.field}：${item.message}` : item.message))
+        .join('；')
+    }
+    return error.message
+  }
+  return '保存失败，请稍后重试。'
+}
+
+async function onSubmit(): Promise<void> {
+  if (submitting.value) return
   const message = validate()
   errorText.value = message
   if (message) return
@@ -105,24 +128,38 @@ function onSubmit(): void {
     pdfUrl: form.value.pdfUrl.trim(),
   }
 
+  submitting.value = true
   try {
-    const saved = props.paper ? updatePaper(props.paper.id, payload) : createPaper(payload)
-    const action = props.paper ? '已保存修改' : '已新增 1 篇论文，数据状态为「待复核」'
-    pushToast(`${action}。${NOT_CONNECTED_NOTICE}`, 'neutral')
+    const saved = props.paper
+      ? await updatePaper(props.paper.id, payload)
+      : await createPaper(payload)
+    pushToast(
+      props.paper ? '论文信息已保存。' : `已新增 1 篇论文，编号 ${saved.code}，数据状态为「待复核」。`,
+    )
     emit('saved', saved)
     emit('close')
   } catch (error) {
-    if (error instanceof DuplicatePaperError) {
-      errorText.value = `该论文已存在：${error.existing.code}《${error.existing.title}》。会议、年份与题目相同的记录不允许重复入库。`
-      return
-    }
-    errorText.value = '保存失败，请稍后重试。'
+    // 保留用户输入：只显示错误，不重置表单、不关闭弹窗
+    errorText.value = describeError(error)
+  } finally {
+    submitting.value = false
   }
+}
+
+function onClose(): void {
+  if (submitting.value) return
+  emit('close')
 }
 </script>
 
 <template>
-  <AppModal :open="open" :title="title" width="640px" @close="emit('close')">
+  <AppModal
+    :open="open"
+    :title="title"
+    width="640px"
+    :close-on-backdrop="!submitting"
+    @close="onClose"
+  >
     <form class="paper-form" novalidate @submit.prevent="onSubmit">
       <div class="form-grid">
         <div>
@@ -171,6 +208,7 @@ function onSubmit(): void {
         />
         <p class="field-hint">
           作者关键词只用于展示，不参与 Top 10、图谱与趋势统计；系统提取的关键词在采集后生成。
+          清空此项会同时移除列表中的作者关键词标签。
         </p>
       </div>
 
@@ -214,8 +252,12 @@ function onSubmit(): void {
     </form>
 
     <template #footer>
-      <button type="button" class="btn btn-secondary" @click="emit('close')">取消</button>
-      <button type="button" class="btn btn-primary" @click="onSubmit">保存</button>
+      <button type="button" class="btn btn-secondary" :disabled="submitting" @click="onClose">
+        取消
+      </button>
+      <button type="button" class="btn btn-primary" :disabled="submitting" @click="onSubmit">
+        {{ submitting ? '保存中…' : '保存' }}
+      </button>
     </template>
   </AppModal>
 </template>
