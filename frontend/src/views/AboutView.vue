@@ -26,13 +26,26 @@ const conferenceYears = computed(() =>
   [...new Set((coverage.value?.covered ?? []).map((item) => item.year))].sort(),
 )
 
-/** 每根柱子的高度：该年各会议纳入分析论文数之和，按最大值归一 */
+/** 每年纳入分析的论文数之和（就是柱高要画的那个量） */
+const yearTotals = computed(() => {
+  const map = new Map<number, number>()
+  for (const item of coverage.value?.covered ?? []) {
+    map.set(item.year, (map.get(item.year) ?? 0) + item.analysis_papers)
+  }
+  return map
+})
+
+/**
+ * 每根柱子的高度：该年各会议之和 ÷ **各年之和的最大值**。
+ *
+ * 注意分母必须是「按年求和后的最大值」——早先误用「单个会议的最大篇数」，
+ * 于是三会议之和超过它时算出 height:126% 这种超过轨道的高度，柱子顶部被容器裁掉。
+ * 乘 92% 留出顶部余量，避免最高柱贴到轨道圆角上沿。
+ */
 function barHeight(year: number): string {
-  const cells = (coverage.value?.covered ?? []).filter((item) => item.year === year)
-  const totals = (coverage.value?.covered ?? []).map((item) => item.analysis_papers)
-  const max = Math.max(...totals, 1)
-  const total = cells.reduce((sum, item) => sum + item.analysis_papers, 0)
-  return `${Math.max(6, Math.round((total / max) * 100))}%`
+  const maxYearTotal = Math.max(...yearTotals.value.values(), 1)
+  const total = yearTotals.value.get(year) ?? 0
+  return `${Math.max(6, Math.round((total / maxYearTotal) * 92))}%`
 }
 
 function sampleOf(conference: string, year: number): number | null {
@@ -347,7 +360,7 @@ const dataSources = [
         title="各会议年份纳入分析的论文数"
         subtitle="柱高表示该年份三个会议纳入分析论文数之和；柱下方的会议标签给出该会议该年份的实际篇数，「无数据」表示该组合没有记录，不做零值填充。"
         unit="单位：篇"
-        height="220px"
+        height="250px"
       >
         <div class="mini-bars">
           <div v-for="year in conferenceYears" :key="year" class="mini-bar-col">
@@ -683,17 +696,18 @@ const dataSources = [
   align-items: flex-end;
   justify-content: space-around;
   gap: 16px;
-  height: 100%;
-  padding: 20px 24px 12px;
+  /* 不再用 height:100%：列里除了轨道还有年份与三行图例，
+     百分百高度会让轨道被撑到容器之外，被容器的 overflow:hidden 裁掉顶部 */
+  padding: 16px 24px 12px;
 }
 
 .mini-bar-col {
   display: flex;
   flex-direction: column;
   align-items: center;
+  justify-content: flex-end;
   gap: 8px;
   flex: 1;
-  height: 100%;
   min-width: 0;
 }
 
@@ -702,7 +716,9 @@ const dataSources = [
   align-items: flex-end;
   width: 100%;
   max-width: 64px;
-  flex: 1;
+  /* 固定高度：柱高按这个高度的百分比计算，容器高度按它 + 年份 + 图例确定 */
+  height: 120px;
+  flex: none;
   border-radius: var(--radius-sm);
   background: var(--color-surface-muted);
 }
