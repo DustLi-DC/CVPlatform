@@ -79,7 +79,21 @@ function parseFields(value: unknown): { field: string; message: string }[] {
   })
 }
 
-async function request<T>(path: string, init?: RequestInit): Promise<T> {
+export interface RequestOptions {
+  /**
+   * 采集接口用 502 / 504 表达「来源不可用」「上游超时」这类业务结局，
+   * 开启后带回业务 code 的响应会原样抛出，不被下面的网关兜底文案覆盖；
+   * 不带业务 code（例如后端未启动、由代理返回）时仍按网关错误处理。
+   */
+  preserveUpstreamErrors?: boolean
+}
+
+/** 统一请求入口：错误解析与 ApiError 只在这里实现一次，各 api 模块共用 */
+export async function apiRequest<T>(
+  path: string,
+  init?: RequestInit,
+  options: RequestOptions = {},
+): Promise<T> {
   let response: Response
   try {
     response = await fetch(path, init)
@@ -103,19 +117,22 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   }
 
   if (!response.ok) {
+    const detail = (payload as { detail?: ErrorDetail } | null)?.detail ?? {}
+    const code = pickString(detail.code, '')
     // 502/503/504 通常来自反向代理（开发环境的 Vite 代理或生产环境的 Nginx）
     // 在后端未启动时出现，直接显示 HTTP 状态码对使用者没有帮助，统一给出可操作的说明。
-    if (response.status === 502 || response.status === 503 || response.status === 504) {
+    const isGatewayStatus =
+      response.status === 502 || response.status === 503 || response.status === 504
+    if (isGatewayStatus && !(options.preserveUpstreamErrors && code)) {
       throw new ApiError(
         response.status,
         'backend_unavailable',
         `无法连接后端服务（网关返回 HTTP ${response.status}），请确认后端已启动后重试。`,
       )
     }
-    const detail = (payload as { detail?: ErrorDetail } | null)?.detail ?? {}
     throw new ApiError(
       response.status,
-      pickString(detail.code, 'http_error'),
+      code || 'http_error',
       pickString(detail.message, `请求失败（HTTP ${response.status}）`),
       parseExisting(detail.existing),
       parseFields(detail.fields),
@@ -156,22 +173,22 @@ function toBody(input: PaperInput): string {
 }
 
 export async function listPapers(query: PaperQuery): Promise<PaperPage> {
-  return request<PaperPage>(`${BASE}?${toSearchParams(query)}`)
+  return apiRequest<PaperPage>(`${BASE}?${toSearchParams(query)}`)
 }
 
 export async function fetchPaper(id: number): Promise<PaperDetail> {
-  return request<PaperDetail>(`${BASE}/${id}`)
+  return apiRequest<PaperDetail>(`${BASE}/${id}`)
 }
 
 export async function fetchRelatedPapers(id: number, limit = 3): Promise<PaperListItem[]> {
-  const payload = await request<{ items: PaperListItem[] }>(
+  const payload = await apiRequest<{ items: PaperListItem[] }>(
     `${BASE}/${id}/related?limit=${limit}`,
   )
   return payload.items
 }
 
 export async function createPaper(input: PaperInput): Promise<PaperDetail> {
-  return request<PaperDetail>(BASE, {
+  return apiRequest<PaperDetail>(BASE, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: toBody(input),
@@ -179,7 +196,7 @@ export async function createPaper(input: PaperInput): Promise<PaperDetail> {
 }
 
 export async function updatePaper(id: number, input: PaperInput): Promise<PaperDetail> {
-  return request<PaperDetail>(`${BASE}/${id}`, {
+  return apiRequest<PaperDetail>(`${BASE}/${id}`, {
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json' },
     body: toBody(input),
@@ -187,7 +204,7 @@ export async function updatePaper(id: number, input: PaperInput): Promise<PaperD
 }
 
 export async function deletePaper(id: number): Promise<void> {
-  await request<void>(`${BASE}/${id}`, { method: 'DELETE' })
+  await apiRequest<void>(`${BASE}/${id}`, { method: 'DELETE' })
 }
 
 /** 会议取值辅助：把任意字符串收敛为受支持的会议，避免把非法值带入查询参数 */

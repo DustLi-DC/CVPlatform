@@ -48,7 +48,7 @@ const router = createRouter({
       path: '/collect',
       name: 'collect',
       component: CollectView,
-      meta: { title: '采集与导入', dataSource: 'pending' satisfies DataSourceKind },
+      meta: { title: '采集与导入', dataSource: 'api' satisfies DataSourceKind },
     },
     {
       path: '/about',
