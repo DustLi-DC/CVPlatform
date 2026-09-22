@@ -102,19 +102,16 @@ class RateLimiter:
 limiter = RateLimiter(_env_float("HTTP_INTERVAL_SECONDS", 0.5))
 
 
-def fetch_text(
+def fetch_bytes(
     url: str,
     *,
     source: str,
     timeout: float | None = None,
     retries: int | None = None,
-    accept: str = "text/html,application/xhtml+xml",
+    accept: str = "application/octet-stream",
     user_agent: str = DEFAULT_USER_AGENT,
-) -> str:
-    """抓取文本内容。超时、限速与重试策略统一在此实现。
-
-    retries 表示**重试次数**（不含首次请求），默认 2 次，即最多请求 3 次。
-    """
+) -> bytes:
+    """抓取二进制内容（如数据集文件）。超时、限速与重试策略与 fetch_text 一致。"""
     timeout_value = (
         timeout if timeout is not None else _env_float("HTTP_TIMEOUT_SECONDS", 10.0)
     )
@@ -130,8 +127,7 @@ def fetch_text(
         )
         try:
             with urllib.request.urlopen(request, timeout=timeout_value) as response:
-                charset = response.headers.get_content_charset() or "utf-8"
-                return response.read().decode(charset, "replace")
+                return response.read()
         except urllib.error.HTTPError as error:
             last_error = error
             status = error.code
@@ -171,6 +167,30 @@ def fetch_text(
             source, f"{source} 返回 HTTP {last_error.code}", last_error.code
         )
     raise SourceUnavailable(source, f"{source} 请求失败：{last_error}")
+
+
+def fetch_text(
+    url: str,
+    *,
+    source: str,
+    timeout: float | None = None,
+    retries: int | None = None,
+    accept: str = "text/html,application/xhtml+xml",
+    user_agent: str = DEFAULT_USER_AGENT,
+) -> str:
+    """抓取文本内容并按响应头声明的字符集解码（二进制抓取见 fetch_bytes）。
+
+    retries 表示**重试次数**（不含首次请求），默认 2 次，即最多请求 3 次。
+    """
+    body = fetch_bytes(
+        url,
+        source=source,
+        timeout=timeout,
+        retries=retries,
+        accept=accept,
+        user_agent=user_agent,
+    )
+    return body.decode("utf-8", "replace")
 
 
 def fetch_json(

@@ -317,8 +317,29 @@ def _key_total(session: Session, scope: Scope, group_by: str) -> int:
     return int(value)
 
 
+def _coverage_kinds(session: Session) -> tuple[dict[str, int], dict[tuple[str, int], str]]:
+    """各会议年份的数据性质：完整论文集 / 试跑截断 / 抽样 / 未知。
+
+    依据是导入时写入的 `dataset_import:*` 元信息（含数据集修订号）：
+    limit 为空表示整份论文集；limit 有值说明是试跑截断，不能算完整。
+    没有数据集记录的年份，若在抽样目标范围内则记为 sampled，否则 unknown（不猜测）。
+    """
+    from .dataset_import import imported_datasets
+
+    kind_by_cell: dict[tuple[str, int], str] = {}
+    for meta in imported_datasets(session).values():
+        conference = str(meta.get("conference") or "")
+        year = meta.get("year")
+        if not conference or not isinstance(year, int):
+            continue
+        kind_by_cell[(conference, year)] = (
+            "partial" if meta.get("limit") is not None else "full"
+        )
+    return kind_by_cell, kind_by_cell
+
+
 def _coverage(session: Session) -> dict[str, object]:
-    """数据覆盖情况：如实说明样本性质与未覆盖的目标组合。"""
+    """数据覆盖情况：如实说明数据性质与未覆盖的目标组合。"""
     rows = session.execute(
         text("SELECT conference, year, COUNT(*) FROM paper GROUP BY 1, 2")
     ).all()
@@ -329,6 +350,20 @@ def _coverage(session: Session) -> dict[str, object]:
         for conference, year in targets
         if present.get((conference, year), 0) == 0
     ]
+    kind_by_cell, _ = _coverage_kinds(session)
+    kinds = {"full": 0, "partial": 0, "sampled": 0, "unknown": 0}
+    full_years: list[dict[str, object]] = []
+    for conference, year in present:
+        if (conference, year) in kind_by_cell:
+            kind = kind_by_cell[(conference, year)]
+        elif (conference, year) in targets:
+            kind = "sampled"
+        else:
+            kind = "unknown"
+        kinds[kind] = kinds.get(kind, 0) + 1
+        if kind == "full":
+            full_years.append({"conference": conference, "year": year})
+
     limit_row = session.get(AppMeta, "harvest_sample_limit")
     if limit_row is not None and limit_row.value.isdigit():
         sampled = True
@@ -347,9 +382,15 @@ def _coverage(session: Session) -> dict[str, object]:
         basis = "unknown"
     return {
         "conference_years": len(present),
-        "sampled": sampled,
+        # 有完整论文集时不能再用一句「抽样」概括：sampled 只在「全部已覆盖单元都是抽样」时为真，
+        # 具体性质逐单元看 coverage_kinds 与 full_coverage_years
+        "sampled": kinds["full"] == 0 and kinds["partial"] == 0 and kinds["sampled"] > 0,
         "sample_limit_per_conference_year": sample_limit,
         "sample_basis": basis,
+        "coverage_kinds": kinds,
+        "full_coverage_years": sorted(
+            full_years, key=lambda item: (str(item["conference"]), int(item["year"]))  # type: ignore[arg-type]
+        ),
         "missing_conference_years": missing,
     }
 
@@ -820,10 +861,13 @@ def _cell_denominators(
 
 
 def coverage_detail(session: Session) -> dict[str, object]:
-    """数据覆盖明细：每个会议年份的记录数、分析分母、关键词状态与来源分布。
+    """数据覆盖明细：每个会议年份的记录数、分析分母、关键词状态、数据性质与来源分布。
 
     与统计口径共用同一套有效性规则（分析集合来自 v_analysis_paper），
     但**记录数**统计的是库中全部行（含待处理与失败），用于说明样本量而非分母。
+
+    `coverage_kind` 说明该会议年份的数据是**完整论文集**还是**抽样**，依据是导入时的记录
+    （`dataset_import:*` 元信息，含数据集修订号）；未记录的按「未知」处理，不猜测。
     """
     rows = session.execute(
         text(
@@ -856,6 +900,21 @@ def coverage_detail(session: Session) -> dict[str, object]:
         (str(conference), int(year)): int(count)
         for conference, year, count in analysis_rows
     }
+    # 已导入的数据集记录：会议年份 → 性质（完整论文集 / 试跑截断）
+    from .dataset_import import imported_datasets
+
+    dataset_meta = imported_datasets(session)
+    kind_by_cell: dict[tuple[str, int], str] = {}
+    for dataset, meta in dataset_meta.items():
+        conference = str(meta.get("conference") or "")
+        year = meta.get("year")
+        if not conference or not isinstance(year, int):
+            continue
+        # limit 不为空说明是试跑导入的截断数据，不能算作完整论文集
+        kind_by_cell[(conference, year)] = (
+            "partial" if meta.get("limit") is not None else "full"
+        )
+
     covered = [
         {
             "conference": str(row[0]),
@@ -866,6 +925,10 @@ def coverage_detail(session: Session) -> dict[str, object]:
             "keyword_done": int(row[4] or 0),
             "keyword_pending": int(row[5] or 0),
             "keyword_failed": int(row[6] or 0),
+            "coverage_kind": kind_by_cell.get(
+                (str(row[0]), int(row[1])),
+                "sampled" if (str(row[0]), int(row[1])) in TARGET_CONFERENCE_YEARS else "unknown",
+            ),
         }
         for row in rows
     ]
@@ -884,8 +947,30 @@ def coverage_detail(session: Session) -> dict[str, object]:
     total_records = sum(item["records"] for item in covered)  # type: ignore[arg-type]
     total_analysis = sum(item["analysis_papers"] for item in covered)  # type: ignore[arg-type]
     coverage = _coverage(session)
+    kinds = {"full": 0, "partial": 0, "sampled": 0, "unknown": 0}
+    for cell in covered:
+        kinds[str(cell["coverage_kind"])] = kinds.get(str(cell["coverage_kind"]), 0) + 1
+    datasets = sorted(
+        (
+            {
+                "dataset": dataset,
+                "conference": str(meta.get("conference") or ""),
+                "year": meta.get("year"),
+                "rows": meta.get("rows"),
+                "revision": meta.get("revision"),
+                "imported_at": meta.get("imported_at"),
+                "limit": meta.get("limit"),
+                "created": meta.get("created"),
+                "updated": meta.get("updated"),
+            }
+            for dataset, meta in dataset_meta.items()
+        ),
+        key=lambda item: (item["conference"], item["year"] or 0),
+    )
     return {
         "conferences": list(CONFERENCES),
+        "coverage_kinds": kinds,
+        "datasets": datasets,
         "target_conference_years": [
             {"conference": conference, "year": year}
             for conference, year in TARGET_CONFERENCE_YEARS
@@ -897,9 +982,12 @@ def coverage_detail(session: Session) -> dict[str, object]:
             "analysis_papers": total_analysis,
             "conference_years": len(covered),
         },
-        "sampled": coverage["sampled"],
+        # 只有所有已覆盖的会议年份都是抽样时才标记整体为抽样；
+        # 混有完整论文集时由 coverage_kinds 逐单元说明，避免一句「抽样」概括全部数据
+        "sampled": kinds["full"] == 0 and kinds["partial"] == 0 and kinds["sampled"] > 0,
         "sample_limit_per_conference_year": coverage["sample_limit_per_conference_year"],
         "sample_basis": coverage["sample_basis"],
+        "full_coverage_years": coverage["full_coverage_years"],
         "by_source": by_source,
         "data_updated_at": _now_updated_at(session),
         "keyword_ruleset_version": _current_ruleset(session),
