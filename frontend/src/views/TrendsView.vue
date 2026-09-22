@@ -24,6 +24,7 @@ import RankBarList, { type RankItem } from '../components/RankBarList.vue'
 import YearRangeSelect from '../components/YearRangeSelect.vue'
 import type { TrendLine } from '../components/TrendChart.vue'
 import { ApiError } from '../api/paperApi'
+import { useAvailableYears } from '../composables/useAvailableYears'
 import { fetchSummary, fetchTop, fetchTrend } from '../api/statsApi'
 import { allConferences, conferenceColors, type Conference } from '../types/paper'
 import {
@@ -71,8 +72,14 @@ let timer: number | null = null
 let trendToken = 0
 let rankToken = 0
 
+/**
+ * 年份选项取自覆盖数据（与筛选无关）。趋势接口返回的 `years` 是按范围算的，
+ * 用它做下拉选项会让「把结束年份选小」之后无法再选回来。
+ */
+const { years: availableYears, load: loadAvailableYears } = useAvailableYears()
+
 const activeYears = computed(() => {
-  const years = summary.value?.years ?? []
+  const years = availableYears.value
   return years.filter(
     (year) =>
       (yearFrom.value === null || year >= yearFrom.value) &&
@@ -264,7 +271,7 @@ async function loadScope(): Promise<void> {
     if (token !== trendToken) return
     summary.value = summaryData
     keyOptions.value = options.items
-    const years = summaryData.years ?? []
+    const years = availableYears.value
     if (yearFrom.value === null && yearTo.value === null && years.length) {
       yearFrom.value = years[0] ?? null
       yearTo.value = years[years.length - 1] ?? null
@@ -462,6 +469,7 @@ function applyRouteQuery(): void {
 
 onMounted(async () => {
   applyRouteQuery()
+  await loadAvailableYears()
   await loadScope()
   await loadTrend()
 })
@@ -540,7 +548,7 @@ watch(() => route.query.kw, applyRouteQuery)
         <YearRangeSelect
           v-model:year-from="yearFrom"
           v-model:year-to="yearTo"
-          :years="summary?.years ?? []"
+          :years="availableYears"
           label="起止年份"
         />
 

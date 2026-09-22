@@ -21,6 +21,7 @@ import RankBarList, { type RankItem } from '../components/RankBarList.vue'
 import StatCard from '../components/StatCard.vue'
 import YearRangeSelect from '../components/YearRangeSelect.vue'
 import { fetchGraph, fetchSummary, fetchTop } from '../api/statsApi'
+import { useAvailableYears } from '../composables/useAvailableYears'
 import { ApiError, listPapers } from '../api/paperApi'
 import type { PaperListItem } from '../types/paper'
 import { allConferences, type Conference } from '../types/paper'
@@ -71,7 +72,12 @@ const drawerPapersError = ref('')
 /** 请求序号：快速切换筛选时，旧响应不得覆盖新结果 */
 let requestToken = 0
 
-const availableYears = computed<number[]>(() => summary.value?.years ?? [])
+/**
+ * 年份选项必须与当前筛选**无关**：早先这里用的是 `summary.years`，而它是按筛选范围算出来的，
+ * 于是把结束年份选到 2023 之后，接口只返回 2020—2023，下拉里就再也选不到 2024—2026。
+ * 现在取自 `/api/stats/coverage`（平台实际覆盖的年份 + 目标年份，与筛选无关）。
+ */
+const { years: availableYears, load: loadAvailableYears } = useAvailableYears()
 
 /** 数据更新时间：后端给的是 UTC ISO 串，这里只做可读化展示，不改数值 */
 const updatedAtText = computed(() => {
@@ -232,9 +238,8 @@ async function load(): Promise<void> {
     summary.value = summaryData
     top.value = topData
     graph.value = graphData
-    // 年份区间默认对齐数据的实际跨度（首次加载或数据变化后）。
-    // years 缺失时（例如后端版本较旧）不阻塞统计展示，只是不自动填充区间。
-    const years = summaryData.years ?? []
+    // 年份区间默认对齐「平台覆盖的年份」（与筛选无关的那份），避免用筛选结果自限
+    const years = availableYears.value
     if (yearFrom.value === null && yearTo.value === null && years.length) {
       yearFrom.value = years[0] ?? null
       yearTo.value = years[years.length - 1] ?? null
@@ -292,8 +297,8 @@ async function loadDrawerPapers(): Promise<void> {
 
 function resetFilters(): void {
   conferences.value = [...allConferences]
-  yearFrom.value = summary.value?.years[0] ?? null
-  yearTo.value = summary.value?.years[summary.value.years.length - 1] ?? null
+  yearFrom.value = availableYears.value[0] ?? null
+  yearTo.value = availableYears.value[availableYears.value.length - 1] ?? null
   nodeLimit.value = 40
   minEdge.value = 2
 }
@@ -345,6 +350,7 @@ watch(
 )
 
 onMounted(async () => {
+  await loadAvailableYears()
   await load()
   applyRouteKeyword(route.query.kw)
 })
@@ -371,9 +377,9 @@ onMounted(async () => {
           hint: '篇（含待处理，分母见下）',
         },
         {
-          label: '覆盖会议年份',
+          label: '平台覆盖会议年份',
           value: summary ? String(summary.coverage.conference_years) : '—',
-          hint: '个组合',
+          hint: '个组合（与下方筛选无关）',
         },
       ]"
     />
