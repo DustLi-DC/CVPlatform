@@ -6,6 +6,7 @@
  */
 import { apiRequest } from './paperApi'
 import type {
+  StatsCoverageDetail,
   StatsGraph,
   StatsScopeQuery,
   StatsSummary,
@@ -24,6 +25,11 @@ function toSearchParams(scope: StatsScopeQuery, extra: Record<string, string> = 
     if (value) params.set(key, value)
   }
   return params.toString()
+}
+
+/** 数据覆盖明细：关于页与首页的范围说明共用，无查询参数（覆盖不随筛选变化） */
+export async function fetchCoverage(): Promise<StatsCoverageDetail> {
+  return apiRequest<StatsCoverageDetail>(`${BASE}/coverage`)
 }
 
 export async function fetchSummary(scope: StatsScopeQuery): Promise<StatsSummary> {

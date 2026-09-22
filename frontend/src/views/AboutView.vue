@@ -5,38 +5,108 @@
  * 数据来源一节按阶段 1 的实测结论书写：实际可用的来源是 CVF Open Access 与 ECVA，
  * 在线兜底为 OpenAlex；DBLP 实测不可用，因此不在此声明使用 DBLP。
  */
+import { computed, onMounted, ref } from 'vue'
+
 import ChartContainer from '../components/ChartContainer.vue'
 import DemoNotice from '../components/DemoNotice.vue'
 import PageHeader from '../components/PageHeader.vue'
-import { demoCoverage, demoYears } from '../demo/coverage'
-import { topicGroupColors, topicGroupLabels } from '../demo/topics'
+import { fetchCoverage } from '../api/statsApi'
+import { topicGroupColors, topicGroupLabels } from '../types/stats'
 import { conferenceColors, type Conference } from '../types/paper'
+import type { StatsCoverageDetail } from '../types/stats'
 
-const conferenceYears = [...new Set(demoCoverage.map((item) => item.year))].sort()
+/**
+ * 覆盖数据来自 `GET /api/stats/coverage`（库中实时计算），不再使用演示数据：
+ * 「18,149 篇」这类演示数字必须替换为按实际覆盖统计的值。
+ */
+const coverage = ref<StatsCoverageDetail | null>(null)
+const coverageError = ref('')
 
+const conferenceYears = computed(() =>
+  [...new Set((coverage.value?.covered ?? []).map((item) => item.year))].sort(),
+)
+
+/** 每根柱子的高度：该年各会议纳入分析论文数之和，按最大值归一 */
 function barHeight(year: number): string {
-  const max = Math.max(...demoCoverage.map((item) => item.papers), 1)
-  const yearsOfYear = demoCoverage.filter((item) => item.year === year)
-  const total = yearsOfYear.reduce((sum, item) => sum + item.papers, 0)
+  const cells = (coverage.value?.covered ?? []).filter((item) => item.year === year)
+  const totals = (coverage.value?.covered ?? []).map((item) => item.analysis_papers)
+  const max = Math.max(...totals, 1)
+  const total = cells.reduce((sum, item) => sum + item.analysis_papers, 0)
   return `${Math.max(6, Math.round((total / max) * 100))}%`
 }
 
 function sampleOf(conference: string, year: number): number | null {
-  const found = demoCoverage.find(
+  const found = (coverage.value?.covered ?? []).find(
     (item) => item.conference === conference && item.year === year,
   )
-  return found ? found.papers : null
+  return found ? found.analysis_papers : null
 }
+
+/** 来源标识 → 展示名与官网地址（外部事实均可核对） */
+const sourceMeta: Record<string, { name: string; url: string }> = {
+  cvf: { name: 'CVF Open Access', url: 'https://openaccess.thecvf.com/' },
+  ecva: { name: 'ECVA', url: 'https://www.ecva.net/' },
+  openalex: { name: 'OpenAlex', url: 'https://openalex.org/' },
+  manual: { name: '手工录入', url: '' },
+  dataset: { name: '课程数据集', url: '' },
+}
+
+const sourceRows = computed(() =>
+  (coverage.value?.by_source ?? []).map((item) => ({
+    ...item,
+    name: sourceMeta[item.source]?.name ?? item.source,
+    url: sourceMeta[item.source]?.url ?? '',
+  })),
+)
+
+const coverageSummary = computed(() => {
+  const data = coverage.value
+  if (!data) return null
+  const missing = data.missing_conference_years
+    .map((item) => `${item.conference} ${item.year}`)
+    .join('、')
+  return {
+    years: conferenceYears.value.length
+      ? `${conferenceYears.value[0]} — ${conferenceYears.value[conferenceYears.value.length - 1]}`
+      : '—',
+    combos: data.totals.conference_years,
+    records: data.totals.records,
+    analysis: data.totals.analysis_papers,
+    missing,
+    sampled: data.sampled,
+    sampleLimit: data.sample_limit_per_conference_year,
+    abstractRate: (() => {
+      const present = data.covered.reduce((sum, item) => sum + item.abstract_present, 0)
+      return data.totals.records
+        ? Math.round((present / data.totals.records) * 1000) / 10
+        : null
+    })(),
+  }
+})
+
+onMounted(async () => {
+  try {
+    coverage.value = await fetchCoverage()
+  } catch (error) {
+    coverageError.value = '加载覆盖数据失败，请确认后端服务已启动后刷新页面。'
+    console.error('加载覆盖数据失败：', error)
+  }
+})
 
 const conferenceMeta: {
   name: Conference
   cadence: string
   intro: string
   years: string
+  /** 官方入口，供读者核对会议与年份规律 */
+  sourceUrl: string
+  sourceLabel: string
 }[] = [
   {
     name: 'CVPR',
     cadence: '每年举办',
+    sourceUrl: 'https://openaccess.thecvf.com/CVPR2024',
+    sourceLabel: 'openaccess.thecvf.com',
     // 长句拆成多段拼接：不改变渲染结果，同时避免超长行
     intro:
       'IEEE/CVF Conference on Computer Vision and Pattern Recognition，'
@@ -47,6 +117,8 @@ const conferenceMeta: {
   {
     name: 'ICCV',
     cadence: '奇数年举办',
+    sourceUrl: 'https://openaccess.thecvf.com/ICCV2023',
+    sourceLabel: 'openaccess.thecvf.com',
     intro:
       'IEEE/CVF International Conference on Computer Vision，'
       + '两年一次的旗舰会议之一，通常在奇数年举办，'
@@ -56,9 +128,11 @@ const conferenceMeta: {
   {
     name: 'ECCV',
     cadence: '偶数年举办',
+    sourceUrl: 'https://www.ecva.net/papers.php',
+    sourceLabel: 'ecva.net',
     intro:
       'European Conference on Computer Vision，两年一次的欧洲旗舰会议，'
-      + '通常在偶数年举办，在三维视觉、几何与重建类方向上的论文占比在演示数据中较为突出。',
+      + '通常在偶数年举办，可由 ECVA 的会议论文页核对。',
     years: '仅偶数年有数据',
   },
 ]
@@ -98,16 +172,25 @@ const dataSources = [
     name: 'CVF Open Access',
     scope: 'CVPR、ICCV 的论文题目、作者、摘要与原文链接',
     desc: '会议官方开放获取页面。论文题目与作者取自会议索引页，摘要取自逐篇详情页。',
+    url: 'https://openaccess.thecvf.com/',
   },
   {
     name: 'ECVA 会议论文页',
     scope: 'ECCV 的论文题目、作者、摘要与原文链接',
-    desc: 'ECCV 官方论文入口，按年份汇总。CVF 不收录 ECCV，因此 ECCV 的样本只能来自 ECVA。',
+    desc: 'ECCV 官方论文入口，按年份汇总。CVF 不收录 ECCV（实测该路径返回 404），因此 ECCV 的样本只能来自 ECVA。',
+    url: 'https://www.ecva.net/papers.php',
   },
   {
     name: 'OpenAlex',
     scope: '在线兜底检索与文献元数据交叉核对',
-    desc: '本地论文库未命中时按题目检索公开文献元数据，返回候选后由使用者确认，避免静默匹配错误论文。',
+    desc: '本地论文库未命中时按题目检索公开文献元数据（含摘要倒排索引还原），返回候选后必须由使用者确认，避免静默匹配错误论文。',
+    url: 'https://openalex.org/',
+  },
+  {
+    name: '会议年份事实核对',
+    scope: '会议周期与年份规律',
+    desc: 'ICCV 奇数年、ECCV 偶数年、CVPR 每年举办，均可在上面的官方入口按年份路径核对（如 /CVPR2024 可访问、ECCV 年份在 ECVA 的 papers 页按年份列出）。',
+    url: '',
   },
 ]
 </script>
@@ -137,8 +220,9 @@ const dataSources = [
         </div>
       </div>
       <DemoNotice class="about-notice" tone="warn">
-        本页面当前展示的论文条目、榜单数值与曲线均标注为演示数据，用于展示统计流程与交互方式，
-        不构成对研究现状的结论。真实数据接入后，此处将替换为实际采集结果与覆盖范围。
+        本平台的数据是<strong>抽样样本</strong>：三个会议、有限年份、每会议年份最多
+        {{ coverageSummary?.sampleLimit ?? 200 }} 篇，论文文本只含题目与摘要。
+        这里的榜单、图谱与曲线都只描述这个样本，不构成对整个领域研究现状的结论。
       </DemoNotice>
     </section>
 
@@ -151,25 +235,60 @@ const dataSources = [
         </div>
         <div>
           <dt>年份范围</dt>
-          <dd>{{ demoYears[0] }} — {{ demoYears[demoYears.length - 1] }}</dd>
+          <dd>{{ coverageSummary ? coverageSummary.years : '—' }}</dd>
         </div>
         <div>
           <dt>会议年份组合</dt>
-          <dd>{{ demoCoverage.length }} 个（ICCV 奇数年 / ECCV 偶数年）</dd>
+          <dd>
+            {{ coverageSummary ? coverageSummary.combos : '—' }} 个
+            <span class="coverage-note">（ICCV 奇数年 / ECCV 偶数年）</span>
+          </dd>
         </div>
         <div>
           <dt>论文样本量</dt>
-          <dd>18,149 篇（演示）</dd>
+          <dd>
+            <template v-if="coverageSummary">
+              {{ coverageSummary.records }} 篇记录，其中
+              <strong>{{ coverageSummary.analysis }} 篇</strong>进入分析分母
+            </template>
+            <template v-else>—</template>
+          </dd>
+        </div>
+        <div>
+          <dt>摘要可用比例</dt>
+          <dd>
+            {{ coverageSummary && coverageSummary.abstractRate !== null ? `${coverageSummary.abstractRate}%` : '—' }}
+          </dd>
+        </div>
+        <div>
+          <dt>关键词规则版本</dt>
+          <dd>{{ coverage?.keyword_ruleset_version ?? '—' }}</dd>
+        </div>
+        <div>
+          <dt>主题表版本</dt>
+          <dd>{{ coverage?.topic_ruleset_version ?? '—' }}</dd>
         </div>
       </dl>
+
+      <p v-if="coverageError" class="field-error" role="alert">{{ coverageError }}</p>
+      <p v-else-if="coverageSummary" class="section-text">
+        <strong>抽样性质</strong>：
+        <template v-if="coverageSummary.sampled">
+          本平台按抽样采集，每个会议年份最多 {{ coverageSummary.sampleLimit }} 篇，
+          占比表示样本内的相对热度，<strong>不等于整届大会的录用比例</strong>。
+        </template>
+        <template v-else>尚未标注抽样性质。</template>
+        <template v-if="coverageSummary.missing">
+          目标范围内还没采集到数据的组合：{{ coverageSummary.missing }}。
+        </template>
+      </p>
 
       <ChartContainer
         class="coverage-chart"
         title="各会议年份纳入分析的论文数"
-        subtitle="柱高表示该会议该年份纳入分析的论文数；灰色缺口表示该年份该会议没有数据，不做零值填充。"
+        subtitle="柱高表示该年份三个会议纳入分析论文数之和；柱下方的会议标签给出该会议该年份的实际篇数，「无数据」表示该组合没有记录，不做零值填充。"
         unit="单位：篇"
         height="220px"
-        pending-note="本图在阶段 8 接入真实覆盖数据后由 ECharts 渲染；当前先用结构相同的 DOM 柱形示意配色与缺口画法。"
       >
         <div class="mini-bars">
           <div v-for="year in conferenceYears" :key="year" class="mini-bar-col">
@@ -210,6 +329,10 @@ const dataSources = [
           </div>
           <p class="conference-intro">{{ meta.intro }}</p>
           <p class="conference-years">年份规律：{{ meta.years }}</p>
+          <p class="conference-years">
+            官方入口：
+            <a :href="meta.sourceUrl" target="_blank" rel="noopener noreferrer">{{ meta.sourceLabel }}</a>
+          </p>
         </div>
       </div>
     </section>
@@ -223,8 +346,22 @@ const dataSources = [
             <span class="tag">{{ item.scope }}</span>
           </div>
           <p class="source-desc">{{ item.desc }}</p>
+          <p v-if="item.url" class="source-url">
+            官方入口：<a :href="item.url" target="_blank" rel="noopener noreferrer">{{ item.url }}</a>
+          </p>
         </li>
       </ul>
+      <p v-if="sourceRows.length" class="section-text">
+        <strong>本库论文的来源标识分布</strong>（按来源去重计数）：
+        <span v-for="(row, index) in sourceRows" :key="row.source">
+          {{ index > 0 ? '、' : '' }}{{ row.name }} {{ row.papers }} 篇
+        </span>。
+        每篇论文的详情页都会显示它自己的来源标识与获取时间，可逐条核对。
+      </p>
+      <p class="section-text">
+        <strong>实测不可用的来源</strong>：DBLP 在核对时返回反爬页面（Anubis），即使带浏览器标识也被拦截，
+        因此没有接入；Semantic Scholar 的公开接口在测试中触发限流，只作为可选项保留说明，不作为主来源。
+      </p>
       <p class="section-text">
         <strong>采集与更新</strong>：单篇采集按完整题目检索；批量导入支持 CSV（title、conference、year）与 TXT（每行一个题目）。
         重复条目按来源标识、会议、年份与题目归一后合并，失败条目可在结果表中重试。
@@ -249,10 +386,19 @@ const dataSources = [
           </div>
         </li>
       </ol>
-      <DemoNotice class="about-notice" tone="warn">
-        统计只使用系统提取的关键词经主题归并后的结果。论文自带的作者关键词只作展示，不参与 Top 10、图谱与趋势，
-        避免两种来源混在一起改变口径。
-      </DemoNotice>
+      <p class="section-text">
+        <strong>统计只使用系统提取的关键词</strong>，并经主题归并（主题表
+        {{ coverage?.topic_ruleset_version ?? 'topic-v2' }}，35 个主题、442 个别名，
+        见仓库内 backend/app/data/topics_v1.json）。论文自带的作者关键词只作展示，
+        不参与 Top 10、图谱与趋势，避免两种来源混在一起改变口径。
+        当前关键词规则版本为 <strong>{{ coverage?.keyword_ruleset_version ?? 'kw-v3' }}</strong>，
+        停用词、短语阈值等规则变化时会提升版本号并按新版本重算。
+      </p>
+      <p class="section-text">
+        过短的常见词（如 image、data、learning）即使高频也不单独作为关键词，
+        它们的方向含义由短语承载（如 image generation、contrastive learning）；
+        映射不到任何主题的关键词如实保留并在界面上标为「未归类」，不强行塞进某个主题。
+      </p>
     </section>
 
     <section class="card about-section">
@@ -325,6 +471,31 @@ const dataSources = [
 </template>
 
 <style scoped>
+.source-url {
+  margin-top: 6px;
+  font-size: 12px;
+  color: var(--color-text-subtle);
+}
+
+.source-url a {
+  color: var(--color-primary);
+}
+
+.coverage-note {
+  color: var(--color-text-subtle);
+  font-size: 12px;
+}
+
+.field-error {
+  margin-top: 12px;
+  font-size: 13px;
+  color: var(--color-danger, #b91c1c);
+}
+
+.conference-years a {
+  color: var(--color-primary);
+}
+
 .about-section {
   margin-bottom: 20px;
   padding: 24px 28px;

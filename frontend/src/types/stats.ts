@@ -158,6 +158,38 @@ export interface StatsTrend {
   group_by: string
 }
 
+/** 单个会议年份的覆盖明细 */
+export interface CoverageCell {
+  conference: string
+  year: number
+  /** 库中记录数（含待处理与失败） */
+  records: number
+  /** 进入分析分母的论文数 */
+  analysis_papers: number
+  abstract_present: number
+  keyword_done: number
+  keyword_pending: number
+  keyword_failed: number
+}
+
+/** 数据覆盖明细（GET /api/stats/coverage） */
+export interface StatsCoverageDetail {
+  conferences: string[]
+  target_conference_years: { conference: string; year: number }[]
+  covered: CoverageCell[]
+  missing_conference_years: { conference: string; year: number }[]
+  totals: { records: number; analysis_papers: number; conference_years: number }
+  sampled: boolean
+  sample_limit_per_conference_year: number | null
+  sample_basis: string
+  /** 论文来源标识分布，说明数据来自哪个来源页面 */
+  by_source: { source: string; papers: number }[]
+  data_updated_at: string | null
+  keyword_ruleset_version: string
+  topic_ruleset_version: string
+  has_data: boolean
+}
+
 /** 统计查询范围（前端侧对象，由 api 层转成查询参数） */
 export interface StatsScopeQuery {
   conferences: string[]
