@@ -877,6 +877,8 @@ def summary(
         "excluded": excluded_counts(session, scope),
         "coverage": _coverage(session),
         "data_updated_at": _now_updated_at(session),
+        # 年份轴：界面用它构造年份区间选择器，取值来自库中实际存在的记录
+        "years": _year_axis(session, scope),
         "analysis_version": read_analysis_version(session),
         "keyword_ruleset_version": _current_ruleset(session),
         "has_data": base > 0,
