@@ -29,7 +29,7 @@ function isActive(item: NavItem): boolean {
 const SOURCE_LABELS: Record<DataSourceKind, { badge: string; hint: string; tone: string }> = {
   api: { badge: '后端数据', hint: '读取数据库中的论文记录', tone: 'badge-ok' },
   demo: { badge: '演示数据', hint: '尚未接入统计接口', tone: 'badge-warn' },
-  pending: { badge: '接口待接入', hint: '采集与任务接口尚未实现', tone: 'badge-neutral' },
+  pending: { badge: '界面待联调', hint: '采集接口已就绪，界面接通在阶段 6', tone: 'badge-neutral' },
   static: { badge: '', hint: '', tone: '' },
 }
 

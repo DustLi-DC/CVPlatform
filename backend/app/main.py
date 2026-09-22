@@ -19,7 +19,7 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from .config import load_settings
 from .db.engine import init_database
-from .routers import papers
+from .routers import collect, papers
 from .services.papers import ApiError
 
 
@@ -143,3 +143,4 @@ async def handle_unexpected_error(_request: Request, error: Exception) -> JSONRe
 
 
 app.include_router(papers.router)
+app.include_router(collect.router)
