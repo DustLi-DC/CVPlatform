@@ -1,0 +1,229 @@
+{
+  "说明": "CVPlatform 真实采集数据的小样例，仅用于课程演示与复现核对",
+  "来源": "CVF Open Access (CVPR/ICCV) 与 ECVA (ECCV)；字段与 /api/papers 响应一致",
+  "采集时间": "2026-09-22T12:27:21Z",
+  "记录数": 10,
+  "papers": [
+    {
+      "code": "CVPR-2024-0001",
+      "title": "Unmixing Diffusion for Self-Supervised Hyperspectral Image Denoising",
+      "conference": "CVPR",
+      "year": 2024,
+      "abstract": "Hyperspectral images (HSIs) have extensive applications in various fields such as medicine agriculture and industry. Nevertheless acquiring high signal-to-noise ratio HSI poses a challenge due to narrow-band spectral filtering. Consequently the importance of HSI denoising is substantial especially for snapshot hyperspectral imaging technology. While most previous HSI denoising methods are supervised creating supervised training datasets for the diverse scenes hyperspectral cameras and scan parameters is impractical. In this work we present Diff-Unmix a self-supervised denoising method for HSI using diffusion denoising generative models. Specifically Diff-Unmix addresses the challenge of recovering noise-degraded HSI through a fusion of Spectral Unmixing and conditional abundance generation. Firstly it employs a learnable block-based spectral unmixing strategy complemented by a pure transformer-based backbone. Then we introduce a self-supervised generative diffusion network to enhance abundance maps from the spectral unmixing block. This network reconstructs noise-free Unmixing probability distributions effectively mitigating noise-induced degradations within these components. Finally the reconstructed HSI is reconstructed through unmixing reconstruction by blending the diffusion-adjusted abundance map with the spectral endmembers. Experimental results on both simulated and real-world noisy datasets show that Diff-Unmix achieves state-of-the-art performance.",
+      "landing_url": "https://openaccess.thecvf.com/content/CVPR2024/html/Zeng_Unmixing_Diffusion_for_Self-Supervised_Hyperspectral_Image_Denoising_CVPR_2024_paper.html",
+      "pdf_url": "https://openaccess.thecvf.com/content/CVPR2024/papers/Zeng_Unmixing_Diffusion_for_Self-Supervised_Hyperspectral_Image_Denoising_CVPR_2024_paper.pdf",
+      "retrieved_at": "2026-09-22T12:27:21Z",
+      "system_keywords": [
+        "denoising",
+        "self-supervised",
+        "reconstructed",
+        "supervised",
+        "diffusion",
+        "generative",
+        "map",
+        "blending"
+      ],
+      "source": "cvf",
+      "source_id": "CVPR-2024-0001"
+    },
+    {
+      "code": "CVPR-2024-0002",
+      "title": "SCE-MAE: Selective Correspondence Enhancement with Masked Autoencoder for Self-Supervised Landmark Estimation",
+      "conference": "CVPR",
+      "year": 2024,
+      "abstract": "Self-supervised landmark estimation is a challenging task that demands the formation of locally distinct feature representations to identify sparse facial landmarks in the absence of annotated data. To tackle this task existing state-of-the-art (SOTA) methods (1) extract coarse features from backbones that are trained with instance-level self-supervised learning (SSL) paradigms which neglect the dense prediction nature of the task (2) aggregate them into memory-intensive hypercolumn formations and (3) supervise lightweight projector networks to naively establish full local correspondences among all pairs of spatial features. In this paper we introduce SCE-MAE a framework that (1) leverages the MAE [??] a region-level SSL method that naturally better suits the landmark prediction task (2) operates on the vanilla feature map instead of on expensive hypercolumns and (3) employs a Correspondence Approximation and Refinement Block (CARB) that utilizes a simple density peak clustering algorithm and our proposed Locality-Constrained Repellence Loss to directly hone only select local correspondences. We demonstrate through extensive experiments that SCE-MAE is highly effective and robust outperforming existing SOTA methods by large margins of 20%-44% on the landmark matching and 9%-15% on the landmark detection tasks.",
+      "landing_url": "https://openaccess.thecvf.com/content/CVPR2024/html/Yin_SCE-MAE_Selective_Correspondence_Enhancement_with_Masked_Autoencoder_for_Self-Supervised_Landmark_CVPR_2024_paper.html",
+      "pdf_url": "https://openaccess.thecvf.com/content/CVPR2024/papers/Yin_SCE-MAE_Selective_Correspondence_Enhancement_with_Masked_Autoencoder_for_Self-Supervised_Landmark_CVPR_2024_paper.pdf",
+      "retrieved_at": "2026-09-22T12:27:22Z",
+      "system_keywords": [
+        "correspondence",
+        "self-supervised",
+        "sota",
+        "feature",
+        "local",
+        "prediction",
+        "estimation",
+        "demand"
+      ],
+      "source": "cvf",
+      "source_id": "CVPR-2024-0002"
+    },
+    {
+      "code": "CVPR-2024-0003",
+      "title": "Event-based Structure-from-Orbit",
+      "conference": "CVPR",
+      "year": 2024,
+      "abstract": "Event sensors offer high temporal resolution visual sensing which makes them ideal for perceiving fast visual phenomena without suffering from motion blur. Certain applications in robotics and vision-based navigation require 3D perception of an object undergoing circular or spinning motion in front of a static camera such as recovering the angular velocity and shape of the object. The setting is equivalent to observing a static object with an orbiting camera. In this paper we propose event-based structure-from-orbit (eSfO) where the aim is to simultaneously reconstruct the 3D structure of a fast spinning object observed from a static event camera and recover the equivalent orbital motion of the camera. Our contributions are threefold: since state-of-the-art event feature trackers cannot handle periodic self-occlusion due to the spinning motion we develop a novel event feature tracker based on spatio-temporal clustering and data association that can better track the helical trajectories of valid features in the event data. The feature tracks are then fed to our novel factor graph-based structure-from-orbit back-end that calculates the orbital motion parameters (e.g. spin rate relative rotational axis) that minimize the reprojection error. For evaluation we produce a new event dataset of objects under spinning motion. Comparisons against ground truth indicate the efficacy of eSfO.",
+      "landing_url": "https://openaccess.thecvf.com/content/CVPR2024/html/Elms_Event-based_Structure-from-Orbit_CVPR_2024_paper.html",
+      "pdf_url": "https://openaccess.thecvf.com/content/CVPR2024/papers/Elms_Event-based_Structure-from-Orbit_CVPR_2024_paper.pdf",
+      "retrieved_at": "2026-09-22T12:27:23Z",
+      "system_keywords": [
+        "event",
+        "motion",
+        "camera",
+        "static",
+        "object",
+        "feature",
+        "fast",
+        "observed"
+      ],
+      "source": "cvf",
+      "source_id": "CVPR-2024-0003"
+    },
+    {
+      "code": "CVPR-2024-0004",
+      "title": "CAT: Exploiting Inter-Class Dynamics for Domain Adaptive Object Detection",
+      "conference": "CVPR",
+      "year": 2024,
+      "abstract": "Domain adaptive object detection aims to adapt detection models to domains where annotated data is unavailable. Existing methods have been proposed to address the domain gap using the semi-supervised student-teacher framework. However a fundamental issue arises from the class imbalance in the labelled training set which can result in inaccurate pseudo-labels. The relationship between classes especially where one class is a majority and the other minority has a large impact on class bias. We propose Class-Aware Teacher (CAT) to address the class bias issue in the domain adaptation setting. In our work we approximate the class relationships with our Inter-Class Relation module (ICRm) and exploit it to reduce the bias within the model. In this way we are able to apply augmentations to highly related classes both inter- and intra-domain to boost the performance of minority classes while having minimal impact on majority classes. We further reduce the bias by implementing a class-relation weight to our classification loss. Experiments conducted on various datasets and ablation studies show that our method is able to address the class bias in the domain adaptation setting. On the Cityscapes ? Foggy Cityscapes dataset we attained a 52.5 mAP a substantial improvement over the 51.2 mAP achieved by the state-of-the-art method.",
+      "landing_url": "https://openaccess.thecvf.com/content/CVPR2024/html/Kennerley_CAT_Exploiting_Inter-Class_Dynamics_for_Domain_Adaptive_Object_Detection_CVPR_2024_paper.html",
+      "pdf_url": "https://openaccess.thecvf.com/content/CVPR2024/papers/Kennerley_CAT_Exploiting_Inter-Class_Dynamics_for_Domain_Adaptive_Object_Detection_CVPR_2024_paper.pdf",
+      "retrieved_at": "2026-09-22T12:27:24Z",
+      "system_keywords": [
+        "class",
+        "bias",
+        "domain",
+        "classe",
+        "relationship",
+        "adaptive",
+        "impact",
+        "adaptation"
+      ],
+      "source": "cvf",
+      "source_id": "CVPR-2024-0004"
+    },
+    {
+      "code": "ICCV-2023-0001",
+      "title": "Towards Attack-tolerant Federated Learning via Critical Parameter Analysis",
+      "conference": "ICCV",
+      "year": 2023,
+      "abstract": "Federated learning is used to train a shared model in a decentralized way without clients sharing private data with each other. Federated learning systems are susceptible to poisoning attacks when malicious clients send false updates to the central server. Existing defense strategies are ineffective under non-IID data settings. This paper proposes a new defense strategy, FedCPA (Federated learning with Critical Parameter Analysis). Our attack-tolerant aggregation method is based on the observation that benign local models have similar sets of top-k and bottom-k critical parameters, whereas poisoned local models do not. Experiments with different attack scenarios on multiple datasets demonstrate that our model outperforms existing defense strategies in defending against poisoning attacks.",
+      "landing_url": "https://openaccess.thecvf.com/content/ICCV2023/html/Han_Towards_Attack-tolerant_Federated_Learning_via_Critical_Parameter_Analysis_ICCV_2023_paper.html",
+      "pdf_url": "https://openaccess.thecvf.com/content/ICCV2023/papers/Han_Towards_Attack-tolerant_Federated_Learning_via_Critical_Parameter_Analysis_ICCV_2023_paper.pdf",
+      "retrieved_at": "2026-09-22T12:33:50Z",
+      "system_keywords": [
+        "federated",
+        "defense",
+        "attack",
+        "critical",
+        "client",
+        "parameter",
+        "strategy",
+        "analysis"
+      ],
+      "source": "cvf",
+      "source_id": "ICCV-2023-0001"
+    },
+    {
+      "code": "ICCV-2023-0002",
+      "title": "Flexible Visual Recognition by Evidential Modeling of Confusion and Ignorance",
+      "conference": "ICCV",
+      "year": 2023,
+      "abstract": "In real-world scenarios, typical visual recognition systems could fail under two major causes, i.e., the misclassification between known classes and the excusable misbehavior on unknown-class images. To tackle these deficiencies, flexible visual recognition should dynamically predict multiple classes when they are unconfident between choices and reject making predictions when the input is entirely out of the training distribution. Two challenges emerge along with this novel task. First, prediction uncertainty should be separately quantified as confusion depicting inter-class uncertainties and ignorance identifying out-of-distribution samples. Second, both confusion and ignorance should be comparable between samples to enable effective decision-making. In this paper, we propose to model these two sources of uncertainty explicitly with the theory of Subjective Logic. Regarding recognition as an evidence-collecting process, confusion is then defined as conflicting evidence, while ignorance is the absence of evidence. By predicting Dirichlet concentration parameters for singletons, comprehensive subjective opinions, including confusion and ignorance, could be achieved via further evidence combinations. Through a series of experiments on synthetic data analysis, visual recognition, and open-set detection, we demonstrate the effectiveness of our methods in quantifying two sources of uncertainties and dealing with flexible recognition.",
+      "landing_url": "https://openaccess.thecvf.com/content/ICCV2023/html/Fan_Flexible_Visual_Recognition_by_Evidential_Modeling_of_Confusion_and_Ignorance_ICCV_2023_paper.html",
+      "pdf_url": "https://openaccess.thecvf.com/content/ICCV2023/papers/Fan_Flexible_Visual_Recognition_by_Evidential_Modeling_of_Confusion_and_Ignorance_ICCV_2023_paper.pdf",
+      "retrieved_at": "2026-09-22T12:33:51Z",
+      "system_keywords": [
+        "uncertainty",
+        "recognition",
+        "flexible",
+        "visual",
+        "classe",
+        "source",
+        "emerge",
+        "theory"
+      ],
+      "source": "cvf",
+      "source_id": "ICCV-2023-0002"
+    },
+    {
+      "code": "ICCV-2023-0003",
+      "title": "ExposureDiffusion: Learning to Expose for Low-light Image Enhancement",
+      "conference": "ICCV",
+      "year": 2023,
+      "abstract": "Previous raw image-based low-light image enhancement methods predominantly relied on feed-forward neural networks to learn deterministic mappings from low-light to normally-exposed images. However, they failed to capture critical distribution information, leading to visually undesirable results. This work addresses the issue by seamlessly integrating a diffusion model with a physics-based exposure model. Different from a vanilla diffusion model that has to perform Gaussian denoising, with the injected physics-based exposure model, our restoration process can directly start from a noisy image instead of pure noise. As such, our method obtains significantly improved performance and reduced inference time compared with vanilla diffusion models. To make full use of the advantages of different intermediate steps, we further propose an adaptive residual layer that effectively screens out the side-effect in the iterative refinement when the intermediate results have been already well-exposed. The proposed framework can work with both real-paired datasets, SOTA noise models, and different backbone networks. We evaluate the proposed method on various public benchmarks, achieving promising results with consistent improvements using different exposure models and backbones. Besides, the proposed method achieves better generalization capacity for unseen amplifying ratios and better performance than a larger feedforward neural model when few parameters are adopted. The code is released at https://github.com/wyf0912/ExposureDiffusion.",
+      "landing_url": "https://openaccess.thecvf.com/content/ICCV2023/html/Wang_ExposureDiffusion_Learning_to_Expose_for_Low-light_Image_Enhancement_ICCV_2023_paper.html",
+      "pdf_url": "https://openaccess.thecvf.com/content/ICCV2023/papers/Wang_ExposureDiffusion_Learning_to_Expose_for_Low-light_Image_Enhancement_ICCV_2023_paper.pdf",
+      "retrieved_at": "2026-09-22T12:33:52Z",
+      "system_keywords": [
+        "intermediate",
+        "physics-based",
+        "vanilla",
+        "backbone",
+        "diffusion",
+        "noise",
+        "enhancement",
+        "already"
+      ],
+      "source": "cvf",
+      "source_id": "ICCV-2023-0003"
+    },
+    {
+      "code": "ECCV-2022-0001",
+      "title": "Learning Depth from Focus in the Wild",
+      "conference": "ECCV",
+      "year": 2022,
+      "abstract": "\"For better photography, most recent commercial cameras including smartphones have either adopted large-aperture lens to collect more light or used a burst mode to take multiple images within short times. These interesting features lead us to examine depth from focus/defocus. In this work, we present a convolutional neural network-based depth estimation from single focal stacks. Our method differs from relevant state-of-the-art works with three unique features. First, our method allows depth maps to be inferred in an end-to-end manner even with image alignment. Second, we propose a sharp region detection module to reduce blur ambiguities in subtle focus changes and weakly texture-less regions. Third, we design an effective downsampling module to ease flows of focal information in feature extractions. In addition, for the generalization of the proposed network, we develop a simulator to realistically reproduce the features of commercial cameras, such as changes in field of view, focal length and principal points. By effectively incorporating these three unique features, our network achieves the top rank in the DDFF 12-Scene benchmark on most metrics. We also demonstrate the effectiveness of the proposed method on various quantitative evaluations and real-world images taken from various off-the-shelf cameras compared with state-of-the-art methods. Our source code is publicly available at https://github.com/wcy199705/DfFintheWild.\"",
+      "landing_url": "https://www.ecva.net/papers/eccv_2022/papers_ECCV/html/19_ECCV_2022_paper.php",
+      "pdf_url": "https://www.ecva.net/papers/eccv_2022/papers_ECCV/papers/136610001.pdf",
+      "retrieved_at": "2026-09-22T12:40:51Z",
+      "system_keywords": [
+        "focal",
+        "cameras",
+        "depth",
+        "focus",
+        "unique",
+        "change",
+        "defocus",
+        "downsampling"
+      ],
+      "source": "ecva",
+      "source_id": "ECCV-2022-0001"
+    },
+    {
+      "code": "ECCV-2022-0002",
+      "title": "Structural Causal 3D Reconstruction",
+      "conference": "ECCV",
+      "year": 2022,
+      "abstract": "\"This paper considers the problem of unsupervised 3D object reconstruction from in-the-wild single-view images. Due to ambiguity and intrinsic ill-posedness, this problem is inherently difficult to solve and therefore requires strong regularization to achieve disentanglement of different latent factors. Unlike existing works that introduce explicit regularizations into objective functions, we look into a different space for implicit regularization -- the structure of latent space. Specifically, we restrict the structure of latent space to capture a topological causal ordering of latent factors (i.e., representing causal dependency as a directed acyclic graph). We first show that different causal orderings matter for 3D reconstruction, and then explore several approaches to find a task-dependent causal factor ordering. Our experiments demonstrate that the latent space structure indeed serves as an implicit regularization and introduces an inductive bias beneficial for reconstruction.\"",
+      "landing_url": "https://www.ecva.net/papers/eccv_2022/papers_ECCV/html/656_ECCV_2022_paper.php",
+      "pdf_url": "https://www.ecva.net/papers/eccv_2022/papers_ECCV/papers/136610140.pdf",
+      "retrieved_at": "2026-09-22T12:40:53Z",
+      "system_keywords": [
+        "causal",
+        "ordering",
+        "regularization",
+        "latent",
+        "factor",
+        "reconstruction",
+        "latent space",
+        "space"
+      ],
+      "source": "ecva",
+      "source_id": "ECCV-2022-0002"
+    },
+    {
+      "code": "ECCV-2022-0003",
+      "title": "Share with Thy Neighbors: Single-View Reconstruction by Cross-Instance Consistency",
+      "conference": "ECCV",
+      "year": 2022,
+      "abstract": "\"Approaches for single-view reconstruction typically rely on viewpoint annotations, silhouettes, the absence of background, multiple views of the same instance, a template shape, or symmetry. We avoid all such supervision and assumptions by explicitly leveraging the consistency between images of different object instances. As a result, our method can learn from large collections of unlabelled images depicting the same object category. Our main contributions are two ways for leveraging cross-instance consistency: (i) progressive conditioning, a training strategy to gradually specialize the model from category to instances in a curriculum learning fashion; and (ii) neighbor reconstruction, a loss enforcing consistency between instances having similar shape or texture. Also critical to the success of our method are: our structured autoencoding architecture decomposing an image into explicit shape, texture, pose, and background; an adapted formulation of differential rendering; and a new optimization scheme alternating between 3D and pose learning. We compare our approach, UNICORN, both on the diverse synthetic ShapeNet dataset - the classical benchmark for methods requiring multiple views as supervision - and on standard real-image benchmarks (Pascal3D+ Car, CUB) for which most methods require known templates and silhouette annotations. We also showcase applicability to more challenging real-world collections (CompCars, LSUN), where silhouettes are not available and images are not cropped around the object.\"",
+      "landing_url": "https://www.ecva.net/papers/eccv_2022/papers_ECCV/html/1851_ECCV_2022_paper.php",
+      "pdf_url": "https://www.ecva.net/papers/eccv_2022/papers_ECCV/papers/136610282.pdf",
+      "retrieved_at": "2026-09-22T12:40:54Z",
+      "system_keywords": [
+        "instance",
+        "consistency",
+        "neighbor",
+        "shape",
+        "single-view",
+        "template",
+        "collection",
+        "texture"
+      ],
+      "source": "ecva",
+      "source_id": "ECCV-2022-0003"
+    }
+  ],
+  "字段说明": "system_keywords 为系统提取关键词（origin=system）；source/source_id/retrieved_at 保留原始来源与采集时间"
+}

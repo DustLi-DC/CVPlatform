@@ -1,0 +1,262 @@
+{
+  "版本": "topic-v1",
+  "说明": "由 1200 篇真实样本的系统关键词归纳的首版主题表，供人工复核后定稿",
+  "依据样本": "6 个会议年份 × 200 篇（见 数据覆盖与来源.md）",
+  "主题": [
+    {
+      "slug": "object-detection",
+      "name": "目标检测",
+      "group_name": "perception",
+      "aliases": [
+        "object detection",
+        "detection",
+        "detector",
+        "open-vocabulary detection"
+      ]
+    },
+    {
+      "slug": "semantic-segmentation",
+      "name": "语义分割",
+      "group_name": "perception",
+      "aliases": [
+        "semantic segmentation",
+        "segmentation",
+        "instance segmentation",
+        "panoptic segmentation"
+      ]
+    },
+    {
+      "slug": "point-cloud",
+      "name": "点云与三维感知",
+      "group_name": "three_d",
+      "aliases": [
+        "point cloud",
+        "point clouds",
+        "lidar"
+      ]
+    },
+    {
+      "slug": "depth-estimation",
+      "name": "深度估计",
+      "group_name": "three_d",
+      "aliases": [
+        "depth estimation",
+        "monocular depth",
+        "depth map"
+      ]
+    },
+    {
+      "slug": "radiance-field",
+      "name": "辐射场与三维重建",
+      "group_name": "three_d",
+      "aliases": [
+        "radiance field",
+        "neural radiance",
+        "neural radiance field",
+        "reconstruction",
+        "3d reconstruction"
+      ]
+    },
+    {
+      "slug": "gaussian-splatting",
+      "name": "三维高斯泼溅",
+      "group_name": "three_d",
+      "aliases": [
+        "gaussian splatting",
+        "3d gaussian",
+        "2d gaussian"
+      ]
+    },
+    {
+      "slug": "view-synthesis",
+      "name": "新视角合成",
+      "group_name": "three_d",
+      "aliases": [
+        "view synthesis",
+        "novel view"
+      ]
+    },
+    {
+      "slug": "diffusion-model",
+      "name": "扩散生成模型",
+      "group_name": "three_d",
+      "aliases": [
+        "diffusion",
+        "text-to-image diffusion",
+        "latent diffusion",
+        "diffusion model"
+      ]
+    },
+    {
+      "slug": "image-generation",
+      "name": "图像生成与编辑",
+      "group_name": "three_d",
+      "aliases": [
+        "image generation",
+        "image editing",
+        "generative model"
+      ]
+    },
+    {
+      "slug": "video-generation",
+      "name": "视频生成与理解",
+      "group_name": "perception",
+      "aliases": [
+        "video generation",
+        "video",
+        "temporal",
+        "motion"
+      ]
+    },
+    {
+      "slug": "vision-language",
+      "name": "视觉语言模型",
+      "group_name": "multimodal",
+      "aliases": [
+        "vision language",
+        "visual language",
+        "text prompt",
+        "text-to-image",
+        "language model"
+      ]
+    },
+    {
+      "slug": "multimodal-learning",
+      "name": "多模态学习",
+      "group_name": "multimodal",
+      "aliases": [
+        "multimodal",
+        "cross-modal",
+        "image text",
+        "text encoder"
+      ]
+    },
+    {
+      "slug": "vision-transformer",
+      "name": "视觉 Transformer",
+      "group_name": "perception",
+      "aliases": [
+        "vision transformer",
+        "transformer",
+        "attention"
+      ]
+    },
+    {
+      "slug": "self-supervised",
+      "name": "自监督与表征学习",
+      "group_name": "perception",
+      "aliases": [
+        "self-supervised",
+        "contrastive learning",
+        "representation learning",
+        "feature representation",
+        "pretraining"
+      ]
+    },
+    {
+      "slug": "domain-adaptation",
+      "name": "域适应与泛化",
+      "group_name": "perception",
+      "aliases": [
+        "domain adaptation",
+        "target domain",
+        "domain gap",
+        "generalization"
+      ]
+    },
+    {
+      "slug": "pose-estimation",
+      "name": "人体姿态与动作",
+      "group_name": "perception",
+      "aliases": [
+        "pose estimation",
+        "human pose",
+        "human motion",
+        "action recognition"
+      ]
+    },
+    {
+      "slug": "adversarial-robustness",
+      "name": "对抗鲁棒性",
+      "group_name": "perception",
+      "aliases": [
+        "adversarial attack",
+        "adversarial",
+        "robustness"
+      ]
+    },
+    {
+      "slug": "knowledge-distillation",
+      "name": "知识蒸馏与压缩",
+      "group_name": "perception",
+      "aliases": [
+        "knowledge distillation",
+        "distillation",
+        "model compression"
+      ]
+    },
+    {
+      "slug": "autonomous-driving",
+      "name": "自动驾驶感知",
+      "group_name": "perception",
+      "aliases": [
+        "autonomous driving",
+        "driving",
+        "trajectory"
+      ]
+    },
+    {
+      "slug": "image-classification",
+      "name": "图像分类与识别",
+      "group_name": "perception",
+      "aliases": [
+        "image classification",
+        "classification",
+        "recognition"
+      ]
+    },
+    {
+      "slug": "image-quality",
+      "name": "图像复原与质量",
+      "group_name": "perception",
+      "aliases": [
+        "image quality",
+        "image restoration",
+        "super-resolution",
+        "denoising"
+      ]
+    },
+    {
+      "slug": "medical-imaging",
+      "name": "医学影像",
+      "group_name": "perception",
+      "aliases": [
+        "medical image",
+        "medical",
+        "clinical"
+      ]
+    },
+    {
+      "slug": "efficiency",
+      "name": "效率与推理成本",
+      "group_name": "perception",
+      "aliases": [
+        "inference time",
+        "computational cost",
+        "efficient",
+        "real-time"
+      ]
+    },
+    {
+      "slug": "benchmark-evaluation",
+      "name": "评测与基准",
+      "group_name": "perception",
+      "aliases": [
+        "benchmark",
+        "ground truth",
+        "evaluation protocol",
+        "metric"
+      ]
+    }
+  ]
+}
