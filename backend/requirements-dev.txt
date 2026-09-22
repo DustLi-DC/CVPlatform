@@ -1,0 +1,6 @@
+# 开发与测试依赖：只在开发与验证环境安装，生产部署只装 requirements.txt。
+# pytest  —— 测试运行器。
+# httpx2  —— FastAPI/Starlette 的 TestClient 传输层，用于在独立测试数据库上
+#            验证接口契约。Starlette 1.6 已弃用 httpx 并推荐 httpx2。
+pytest==8.4.2
+httpx2==2.13.0
