@@ -19,7 +19,7 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from .config import load_settings
 from .db.engine import init_database
-from .routers import collect, papers
+from .routers import collect, import_, papers
 from .services.papers import ApiError
 
 
@@ -50,6 +50,7 @@ async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
     """启动时初始化或升级数据库；可重复启动，数据保留。"""
     settings = load_settings()
     summary = init_database()
+    _recover_tasks()
     logger.info(
         "数据库就绪：%s（环境 %s，结构版本 v%s → v%s，本次应用迁移 %s）",
         summary["database_path"],
@@ -61,7 +62,31 @@ async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
     yield
 
 
-app = FastAPI(title="CVPlatform API", version="0.2.0", lifespan=lifespan)
+def _recover_tasks() -> None:
+    """启动时收敛被中断的任务；按 AUTO_RESUME_TASKS 决定是否自动续跑。
+
+    这样服务重启后未完成任务不会停在「运行中」，而是有明确的可恢复状态。
+    """
+    from .db.engine import session_scope
+    from .services import tasks
+
+    with session_scope() as session:
+        recovered = tasks.recover_interrupted(
+            session, auto_resume=tasks.AUTO_RESUME_TASKS
+        )
+        if not recovered:
+            return
+        logger.info("发现 %s 个被中断的任务：%s", len(recovered), recovered)
+
+    if not tasks.AUTO_RESUME_TASKS:
+        return
+    # 只启动一次执行器：它会依次处理所有 pending 任务。
+    # 逐个 start() 会因为「已有任务在跑」而只生效第一个，导致其余任务停在等待状态。
+    tasks.runner.start(recovered[0])
+    logger.info("已重新入队：%s", recovered)
+
+
+app = FastAPI(title="CVPlatform API", version="0.3.0", lifespan=lifespan)
 
 
 class HealthResponse(BaseModel):
@@ -144,3 +169,4 @@ async def handle_unexpected_error(_request: Request, error: Exception) -> JSONRe
 
 app.include_router(papers.router)
 app.include_router(collect.router)
+app.include_router(import_.router)

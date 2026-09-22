@@ -33,6 +33,20 @@ KEYWORD_STATUSES: tuple[str, ...] = ("pending", "running", "done", "failed")
 KEYWORD_RULESET_VERSION = "kw-v2"
 TOPIC_RULESET_VERSION = "topic-v0"
 
+# 目标覆盖范围：阶段 1 确定的抽样组合（三大会议各两个实际举办年份）。
+# 批量导入的标题匹配与真实数据采集都以这一处为准，避免两处范围不一致。
+TARGET_CONFERENCE_YEARS: tuple[tuple[str, int], ...] = (
+    ("CVPR", 2024),
+    ("CVPR", 2025),
+    ("ICCV", 2023),
+    ("ICCV", 2025),
+    ("ECCV", 2022),
+    ("ECCV", 2024),
+)
+
+# 每个会议年份的抽样目标条数（阶段 1 确认为约 200）
+HARVEST_SAMPLE_LIMIT = int(os.environ.get("HARVEST_SAMPLE_LIMIT") or 200)
+
 # 分析集合要求的最小标题长度（归一化后）
 MIN_ANALYSIS_TITLE_LENGTH = 4
 # 新增/编辑论文时要求的最小标题长度（与前端校验一致）
@@ -41,6 +55,10 @@ MIN_CREATE_TITLE_LENGTH = 8
 # 列表分页上限
 MAX_PAGE_SIZE = 100
 DEFAULT_PAGE_SIZE = 8
+
+# 批量导入限制：行数与文件大小上限（阶段 1 与原型均按 500 行、2 MB 约定）
+IMPORT_MAX_ROWS = int(os.environ.get("IMPORT_MAX_ROWS") or 500)
+IMPORT_MAX_BYTES = int(os.environ.get("IMPORT_MAX_BYTES") or 2 * 1024 * 1024)
 
 
 def repository_root() -> Path:
