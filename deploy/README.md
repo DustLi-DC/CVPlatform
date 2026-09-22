@@ -285,10 +285,22 @@ bash ~/cvplatform-release-1.0.0/deploy/user/bootstrap.sh ~/cvplatform-release-1.
 
 | 机器条件 | 采取的做法 |
 |---|---|
-| 有免密 sudo + systemd | 生成 `cvplatform.service`（`User=<登录用户>` + `AmbientCapabilities=CAP_NET_BIND_SERVICE`）并启动，由 systemd 授权绑 80 |
+| 有免密 sudo + systemd | 生成 `cvplatform.service`（数字 UID + `AmbientCapabilities=CAP_NET_BIND_SERVICE`）并设为开机自启，由 systemd 授权绑 80 |
 | 有 sudo 但需密码、无 systemd | 打印一条 `sudo setcap 'cap_net_bind_service=+ep' <venv>/bin/python3*`，执行后普通用户即可绑 80 |
 | 没有 sudo | 无法绑 80，自动退回高位端口并给出 SSH 端口转发命令（`ssh -L 8080:127.0.0.1:8000 …`） |
-| 没有 Python | 有 sudo 就用 apt 装 `python3 python3-venv python3-pip`；否则给出 conda/管理员安装的替代方案 |
+| Python 低于 3.11 | 按「发行版仓库 → deadsnakes PPA → uv 独立解释器」三级回退自动装 3.12；全都不可用时给出人工命令 |
+
+三个容易踩的细节（都在本轮实测过，见 11c）：
+
+1. **授权必须早于首次启动**：`AmbientCapabilities` 只在进程启动时生效，所以 systemd 单元要在
+   首次拉起服务**之前**就位。脚本里 `bootstrap.sh` 先写单元（只 `enable` 不 `start`），
+   等 `install.sh` 建好虚拟环境后再 `restart`。
+2. **`env.sh` 必须是纯 `KEY=value`**：systemd 的 `EnvironmentFile` 不是 shell，遇到
+   `export CVPLATFORM_DB_PATH=…` 会记 `invalid variable name` 并**整行忽略**，服务会拿到空的
+   数据库路径、退回到默认库。`ctl.sh` 读取同一文件时用 `set -a` 自动导出，两边共用一份。
+3. **Python 版本闸门要实测**：只看 `command -v python3` 会选中存在但版本过低的解释器
+   （Ubuntu 22.04 自带 3.10.12，项目用了 `datetime.UTC`，需要 3.11+）。脚本现在实跑
+   `sys.version_info >= (3, 11)` 再决定是否采用。
 
 只想装应用、不需要特权端口时，直接用 `install.sh`（不再需要 sudo）：
 
@@ -302,6 +314,77 @@ bash ~/cvplatform/deploy/user/ctl.sh status|logs|restart|stop
 
 对外访问需要放行端口；若机器不对公网开放，用 SSH 端口转发即可：
 `ssh -L 8080:127.0.0.1:8000 WORK2@65.52.167.95`，再在本地打开 `http://127.0.0.1:8080`。
+
+## 11c. 本轮实际部署记录（Azure 新机 `65.52.167.95`，2026-09-22）
+
+目标机：`ssh WORK2@…`（用户名即 `3349260833@qq.com`，家目录 `/home/3349260833`），
+Ubuntu 22.04（内核 6.8.0-1065-azure，自带 Python **3.10.12**），免密 sudo 可用、systemd 可用、
+端口 80 空闲。本机无法直连该机器，以下命令均由人工执行后回传输出。
+
+实际执行顺序与结果：
+
+| 步骤 | 命令 | 结果 |
+|---|---|---|
+| 1 | `scp` 发布包 + `tar -xzf` | 解包到 `~/cvplatform-release-1.0.0` |
+| 2 | `bootstrap.sh <目录> --port 80` | 探测通过，但 **Python 3.10.12 未达 3.11+ 闸门而中止** |
+| 3 | 手工装 3.12：`add-apt-repository -y ppa:deadsnakes/ppa` + `apt-get install -y python3.12 python3.12-venv` | `/usr/bin/python3.12`（3.12.13）可用 |
+| 4 | 重跑 `bootstrap.sh <目录> --port 80` | 依赖安装成功（17 个包全有 cp312 wheel）、代码与前端产物就位、数据库快照 29,072 篇落盘 |
+| 5 | 自检 | 进程启动后**立即退出**，`/ → 000`；`install.sh` 因 `set -e` 中断，未走到端口授权步骤 |
+
+第 5 步的两个根因（都在本轮修掉）：
+
+1. **启动顺序反了**：`ctl.sh` 以普通用户身份 `nohup … --port 80`，内核拒绝非 root 绑定特权端口；
+   而授予 `CAP_NET_BIND_SERVICE` 的 systemd 单元原本排在安装**之后**创建——永远赶不上首次启动。
+   现在改为先写单元、后启动。
+2. **`set -e` 放大了失败**：自检里的 `curl` 在服务没起来时返回非零，直接让 `install.sh` 整体中止，
+   连带跳过了后续步骤。现在自检与启动失败都改为非致命，失败时打印最近 20 行日志与
+   `journalctl -u cvplatform -n 20`，把原因直接摆出来。
+
+另外修正一处**会导致服务读错数据库**的隐患：`install.sh` 生成的 `env.sh` 原来每行都带 `export`，
+而 systemd 的 `EnvironmentFile` 不认这个前缀（报 `invalid variable name … ignoring`），
+环境变量会被整行丢弃。现在 `env.sh` 输出纯 `KEY=value`，`ctl.sh` 用 `set -a` 读取，
+systemd 与 nohup 两种方式共用同一份文件。
+
+在新机上起 80 端口的最小增量（已部署完成后只需这一步；路径按实际 $HOME 展开）：
+
+```bash
+sudo tee /etc/systemd/system/cvplatform.service >/dev/null <<EOF
+[Unit]
+Description=CVPlatform (FastAPI + Uvicorn, frontend served by backend)
+After=network.target
+
+[Service]
+Type=simple
+User=$(id -u)
+Group=$(id -g)
+WorkingDirectory=$HOME/cvplatform
+Environment=CVPLATFORM_ENV=production
+Environment=CVPLATFORM_DB_PATH=$HOME/cvplatform-data/cvplatform.db
+Environment=CVPLATFORM_SERVE_FRONTEND=$HOME/cvplatform/frontend/dist
+Environment=CVPLATFORM_PORT=80
+Environment=PYTHONPATH=$HOME/cvplatform/backend
+Environment=PYTHONUNBUFFERED=1
+Environment=AUTO_RESUME_TASKS=true
+Environment=HTTP_INTERVAL_SECONDS=0.5
+AmbientCapabilities=CAP_NET_BIND_SERVICE
+CapabilityBoundingSet=CAP_NET_BIND_SERVICE
+ExecStart=$HOME/cvplatform/.venv/bin/python -m uvicorn app.main:app --app-dir $HOME/cvplatform/backend --host 0.0.0.0 --port 80 --workers 1
+Restart=always
+RestartSec=3
+MemoryMax=800M
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target
+EOF
+sudo systemctl daemon-reload && sudo systemctl enable --now cvplatform
+sleep 4 && systemctl is-active cvplatform
+curl -s -o /dev/null -w "/ → %{http_code}\n" http://127.0.0.1/
+curl -s http://127.0.0.1/api/stats/coverage | head -c 200
+```
+
+这里用显式 `Environment=` 而不是 `EnvironmentFile=`，是为了绕开服务器上那份**旧格式**
+（带 `export`）的 `env.sh`；重跑修好的 `install.sh` 后两份写法都可用了。
 
 ## 12. 本轮遗留
 

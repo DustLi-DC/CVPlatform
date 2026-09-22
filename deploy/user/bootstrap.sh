@@ -79,56 +79,113 @@ fi
 [[ $PORT_IN_USE -eq 1 ]] && fail "端口 $PORT 已被占用，请先停掉占用进程或换端口（--port 其他值）"
 
 log "1/5 Python 环境"
+# 项目需要 3.11+（使用 datetime.UTC；已核对全仓仅此一处 3.11+ 特性）。
+# 很多云主机（例如 Ubuntu 22.04）自带的是 3.10，因此这里**实测版本**而不是只看命令是否存在，
+# 并按“机器已有 → 发行版仓库 → deadsnakes PPA → 用户态独立解释器”的顺序补齐。
+VER_CHECK='import sys; raise SystemExit(0 if sys.version_info >= (3, 11) else 1)'
 PY=""
-for candidate in python3.12 python3.11 python3 python; do
-  if command -v "$candidate" >/dev/null 2>&1; then PY="$(command -v "$candidate")"; break; fi
-done
 
-if [[ -z "$PY" ]]; then
-  note "未找到 Python 3"
+py_ok() { [[ -n "${1:-}" ]] && [[ -x "$1" ]] && "$1" -c "$VER_CHECK" >/dev/null 2>&1; }
+
+pick_py() {
+  local cand p
+  for cand in python3.13 python3.12 python3.11 python3 python; do
+    p="$(command -v "$cand" 2>/dev/null || true)"
+    if py_ok "$p"; then PY="$p"; return 0; fi
+  done
+  return 1
+}
+
+# Ubuntu 24.04 等自带仓库里就有 3.12
+install_py312_apt() {
+  apt-cache policy python3.12 2>/dev/null | grep -q 'Candidate: [0-9]' || return 1
+  note "发行版仓库提供 python3.12，直接安装"
+  sudo apt-get update -qq && sudo apt-get install -y -qq python3.12 python3.12-venv
+}
+
+# Ubuntu 22.04（jammy）等自带仓库只有 3.10，3.12 走 deadsnakes
+install_py312_deadsnakes() {
+  note "自带仓库没有 3.12，添加 deadsnakes PPA 安装 python3.12"
+  sudo apt-get update -qq || return 1
+  sudo apt-get install -y -qq software-properties-common || return 1
+  sudo add-apt-repository -y ppa:deadsnakes/ppa || return 1
+  sudo apt-get update -qq || return 1
+  sudo apt-get install -y -qq python3.12 python3.12-venv
+}
+
+# 无 sudo 或上面都失败时的兜底：uv 下载官方独立 CPython（用户态，不碰系统）
+install_py312_uv() {
+  command -v curl >/dev/null 2>&1 || return 1
+  note "改用 uv 安装独立 CPython 3.12（用户态 $HOME/.local，不需要 sudo）"
+  curl -LsSf https://astral.sh/uv/install.sh | sh || return 1
+  local uv="$HOME/.local/bin/uv"
+  [[ -x "$uv" ]] || uv="$(command -v uv 2>/dev/null || true)"
+  [[ -n "$uv" ]] || return 1
+  "$uv" python install 3.12 || return 1
+  PY="$("$uv" python find 3.12 2>/dev/null || true)"
+  py_ok "$PY"
+}
+
+if [[ -n "${CVPLATFORM_PYTHON:-}" ]]; then
+  PY="$CVPLATFORM_PYTHON"
+  py_ok "$PY" || fail "CVPLATFORM_PYTHON 指向的解释器不满足 3.11+：$PY（$("$PY" -V 2>&1 || true)）"
+  note "使用 CVPLATFORM_PYTHON 指定的解释器"
+elif pick_py; then
+  note "机器上已有满足 3.11+ 的解释器"
+else
+  note "机器自带的 Python 版本过低（$( (command -v python3 >/dev/null 2>&1 && python3 -V 2>&1) || echo '未找到 python3')），开始安装 Python 3.12 …"
   if [[ $HAS_SUDO -eq 1 ]]; then
-    note "用 sudo 安装 python3 / python3-venv / python3-pip …"
-    sudo apt-get update -qq && sudo apt-get install -y -qq python3 python3-venv python3-pip
-    PY="$(command -v python3)"
-  else
+    install_py312_apt || true
+    pick_py || true
+    if ! py_ok "$PY"; then
+      install_py312_deadsnakes || true
+      pick_py || true
+    fi
+  fi
+  if ! py_ok "$PY"; then
+    install_py312_uv || true
+  fi
+  if ! py_ok "$PY"; then
     cat >&2 <<'EOF'
-!! 机器上没有 Python 3，且当前用户没有可用的 sudo。
-   请任选一种方式后重跑本脚本：
-     a) 找管理员执行： sudo apt-get install -y python3 python3-venv python3-pip
-     b) 用 conda/miniconda 自建环境，然后指定解释器：
-        CVPLATFORM_PYTHON=$HOME/miniconda3/bin/python bash deploy/user/bootstrap.sh <发布目录> --port 80
-     c) 该机器为 Ubuntu 24.04 时通常自带 python3.12，可先确认： ls /usr/bin/python3*
+!! 无法自动获得 Python 3.11+。请任选一种方式，然后重跑本脚本（脚本可重复执行）：
+     a) 有管理员权限时手动装： sudo apt-get install -y software-properties-common
+       sudo add-apt-repository -y ppa:deadsnakes/ppa && sudo apt-get update
+       sudo apt-get install -y python3.12 python3.12-venv
+     b) 机器能访问外网时用官方独立解释器：
+       curl -LsSf https://astral.sh/uv/install.sh | sh && ~/.local/bin/uv python install 3.12
+     c) 已有 conda： conda create -y -n cvp python=3.12 && 用 conda run 或直接指定解释器
+        CVPLATFORM_PYTHON=$HOME/miniconda3/envs/cvp/bin/python bash deploy/user/bootstrap.sh <发布目录> --port 80
+   另一个可行方向是让应用支持 3.10（改掉 datetime.UTC 的唯一用法），这属于代码改动，需要单独授权。
 EOF
     exit 1
   fi
-elif [[ -n "${CVPLATFORM_PYTHON:-}" ]]; then
-  PY="$CVPLATFORM_PYTHON"
 fi
 note "使用解释器：$PY（$("$PY" -V 2>&1)）"
-"$PY" - <<'PYEOF' || fail "Python 版本过低：需要 3.11+（项目使用 datetime.UTC 等特性）"
-import sys
-raise SystemExit(0 if sys.version_info >= (3, 11) else 1)
-PYEOF
 if ! "$PY" -m venv --help >/dev/null 2>&1; then
   if [[ $HAS_SUDO -eq 1 ]]; then
-    note "virtualenv 模块不可用，用 sudo 安装 python3-venv …"
-    sudo apt-get install -y -qq python3-venv
+    note "venv 模块不可用，尝试安装对应的 venv 包 …"
+    sudo apt-get install -y -qq "python$("$PY" -c 'import sys;print("%d.%d"%sys.version_info[:2])')-venv" \
+      || sudo apt-get install -y -qq python3-venv \
+      || fail "无法安装 venv 包，请让管理员处理（或改用 conda 环境）"
   else
     fail "Python 缺少 venv 模块，请让管理员安装 python3-venv（或改用 conda 环境）"
   fi
 fi
+# 把选定解释器传给 install.sh：否则它会自己再挑一次，可能又挑回到系统自带的低版本
+export CVPLATFORM_PYTHON="$PY"
 
-log "2/5 部署应用（代码、前端、数据库、依赖）"
-bash "$SCRIPT_DIR/install.sh" "$RELEASE_DIR" --port "${PORT_FOR_INSTALL:-$PORT}"
-note "已按端口 $PORT 完成部署与首次启动自检"
-
-log "3/5 端口 $PORT 的绑定授权"
+log "2/5 端口 $PORT 的绑定授权（必须赶在首次启动之前）"
 BIND_OK=1
+SYSTEMD_UNIT=0
 if [[ $PORT -lt 1024 ]]; then
   if [[ $EUID -eq 0 ]]; then
     note "当前是 root，可直接绑定"
   elif [[ $HAS_SYSTEMD -eq 1 && $HAS_SUDO -eq 1 ]]; then
     note "生成 systemd 单元并授予 CAP_NET_BIND_SERVICE（推荐）"
+    # 两个细节：
+    #   1) User=/Group= 用数字 ID：这台机器的用户名含 @ 等字符，数字 ID 不会有歧义；
+    #   2) 环境文件必须是 KEY=value 纯文本——systemd 的 EnvironmentFile 不是 shell，
+    #      遇到 `export XXX=1` 会记 “invalid variable name” 并整行忽略（实测报错原文如此）。
     UNIT=/etc/systemd/system/$SERVICE_NAME.service
     sudo bash -c "cat > '$UNIT'" <<EOF
 [Unit]
@@ -137,57 +194,58 @@ After=network.target
 
 [Service]
 Type=simple
-User=$USER_NAME
-Group=$(id -gn)
+User=$(id -u)
+Group=$(id -g)
 WorkingDirectory=$APP_DIR
-EnvironmentFile=$APP_DIR/env.sh
-# 关键：允许非 root 用户绑定 80 这类特权端口
+EnvironmentFile=-$APP_DIR/env.sh
+Environment=PYTHONPATH=$APP_DIR/backend
+Environment=PYTHONUNBUFFERED=1
+# 关键：允许非 root 用户绑定 80 这类特权端口，且必须在进程启动前就生效
 AmbientCapabilities=CAP_NET_BIND_SERVICE
 CapabilityBoundingSet=CAP_NET_BIND_SERVICE
 ExecStart=$APP_DIR/.venv/bin/python -m uvicorn app.main:app --app-dir $APP_DIR/backend --host 0.0.0.0 --port $PORT --workers 1
 Restart=always
 RestartSec=3
 MemoryMax=800M
-NoNewPrivileges=true
 PrivateTmp=true
 
 [Install]
 WantedBy=multi-user.target
 EOF
-    sudo systemctl daemon-reload
-    sudo systemctl enable --now $SERVICE_NAME
-    note "已启动 $SERVICE_NAME（systemd 负责绑定 $PORT 并自动重启）"
-    note "此路径下请用 systemctl 管理：systemctl status|restart|stop $SERVICE_NAME"
-  elif command -v sudo >/dev/null 2>&1 && command -v setcap >/dev/null 2>&1; then
-    note "无免密 sudo：请手动执行下面这一条，给虚拟环境的解释器授予绑定特权端口的能力"
-    echo
-    echo "    sudo setcap 'cap_net_bind_service=+ep' $APP_DIR/.venv/bin/python3*"
-    echo
-    note "执行后重跑： bash $SCRIPT_DIR/ctl.sh restart"
+    # 先只 enable 不 start：此时虚拟环境还没建，现在启动只会反复失败重启
+    sudo systemctl daemon-reload || fail "systemctl daemon-reload 失败"
+    sudo systemctl enable $SERVICE_NAME >/dev/null 2>&1 || true
+    SYSTEMD_UNIT=1
+    note "单元已就位并设为开机自启（暂不启动，等 install.sh 建好虚拟环境）"
   else
+    note "没有免密 sudo：$PORT 是特权端口，需要部署完成后由管理员授权一次（见第 4 步）"
     BIND_OK=0
   fi
 fi
 
-log "4/5 启动方式确认"
-if [[ $PORT -lt 1024 && $EUID -ne 0 && ! ( $HAS_SYSTEMD -eq 1 && $HAS_SUDO -eq 1 ) ]]; then
-  note "当前权限下无法绑定 $PORT。可选方案："
-  note "  a) 执行上面的 setcap 命令（需要管理员协助一次）后重启；"
-  note "  b) 退回高位端口并使用 SSH 端口转发："
+log "3/5 部署应用（代码、前端、数据库、依赖）"
+bash "$SCRIPT_DIR/install.sh" "$RELEASE_DIR" --port "${PORT_FOR_INSTALL:-$PORT}"
+note "已按端口 $PORT 完成部署与首次自检"
+
+log "4/5 启动与验证"
+if [[ $SYSTEMD_UNIT -eq 1 ]]; then
+  sudo systemctl restart $SERVICE_NAME
+  sleep 4
+  note "服务状态：$(systemctl is-active $SERVICE_NAME 2>/dev/null || true)"
+  note "此路径下请用 systemctl 管理：systemctl status|restart|stop $SERVICE_NAME"
+elif [[ $PORT -lt 1024 && $EUID -ne 0 ]]; then
+  note "只差一步授权。请执行下面这一条（给虚拟环境的解释器加绑定能力），然后重跑本脚本："
   echo
-  echo "     bash $APP_DIR/deploy/user/ctl.sh stop"
-  echo "     bash $SCRIPT_DIR/install.sh $RELEASE_DIR --port $FALLBACK_PORT"
-  echo "     ssh -L 8080:127.0.0.1:$FALLBACK_PORT $USER_NAME@$(hostname -I 2>/dev/null | awk '{print $1}')"
-  echo "     # 然后本地浏览器打开 http://127.0.0.1:8080"
+  echo "    sudo setcap 'cap_net_bind_service=+ep' $APP_DIR/.venv/bin/python3*"
   echo
   BIND_OK=0
-elif [[ $HAS_SYSTEMD -eq 1 && $HAS_SUDO -eq 1 && $PORT -lt 1024 ]]; then
-  note "由 systemd 托管；健康检查："
-  curl -s -o /dev/null -w "    http://127.0.0.1:$PORT/api/health → %{http_code}\n" "http://127.0.0.1:$PORT/api/health" || true
 else
-  note "由 deploy/user/ctl.sh 托管（nohup + PID 文件）；健康检查："
-  curl -s -o /dev/null -w "    http://127.0.0.1:$PORT/api/health → %{http_code}\n" "http://127.0.0.1:$PORT/api/health" || true
+  bash "$APP_DIR/deploy/user/ctl.sh" restart || true
 fi
+
+HEALTH="$(curl -s -o /dev/null -w '%{http_code}' -m 5 "http://127.0.0.1:$PORT/api/health" 2>/dev/null || true)"
+note "健康检查 http://127.0.0.1:$PORT/api/health → ${HEALTH:-无响应}"
+[[ "$HEALTH" == "200" ]] && BIND_OK=1 || BIND_OK=0
 
 log "5/5 结果"
 if [[ $BIND_OK -eq 1 ]]; then
@@ -195,5 +253,13 @@ if [[ $BIND_OK -eq 1 ]]; then
   note "公网访问需要在安全组/防火墙放行 $PORT。"
   curl -s "http://127.0.0.1:$PORT/api/stats/coverage" | head -c 240; echo
 else
-  note "尚未在本机绑定 $PORT：按上面的方案 a 或 b 处理后即可访问。"
+  note "端口 $PORT 尚未正常提供服务。最近 20 行日志（先看这里，失败原因通常一目了然）："
+  echo
+  if [[ $SYSTEMD_UNIT -eq 1 ]]; then
+    sudo journalctl -u $SERVICE_NAME -n 20 --no-pager 2>/dev/null || true
+  else
+    tail -n 20 "$APP_DIR/logs/app.log" 2>/dev/null || echo "  （暂无日志文件）"
+  fi
+  echo
+  note "常见原因：端口被占用、特权端口未授权、数据库路径不可写。"
 fi

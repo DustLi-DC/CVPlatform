@@ -23,13 +23,32 @@ ENV_FILE="$APP_DIR/env.sh"
 PID_FILE="$APP_DIR/cvplatform.pid"
 LOG_DIR="$APP_DIR/logs"
 LOG_FILE="$LOG_DIR/app.log"
+SERVICE_NAME="${CVPLATFORM_SERVICE:-cvplatform}"
+UNIT_FILE="/etc/systemd/system/$SERVICE_NAME.service"
 
 [[ -f "$ENV_FILE" ]] || { echo "缺少 $ENV_FILE，请先执行 deploy/user/install.sh" >&2; exit 1; }
 
+# env.sh 是纯 KEY=value（systemd 的 EnvironmentFile 也读它，所以不能写 export），
+# 用 set -a 临时打开自动导出，保证子进程能拿到这些变量
+set -a
 # shellcheck disable=SC1090
 source "$ENV_FILE"
+set +a
 PORT="${CVPLATFORM_PORT:-8000}"
 VENV_PY="$APP_DIR/.venv/bin/python"
+
+# 同一个应用只允许一种启动方式：systemd 已经在管的时候再用 nohup 启动会抢同一个端口
+systemd_managed() {
+  [[ -f "$UNIT_FILE" ]] && command -v systemctl >/dev/null 2>&1 && [[ -d /run/systemd/system ]]
+}
+
+# systemd 托管时统一走这里；非 root 需要用 sudo（免密时无感，需要密码时会提示）
+sysctl_do() {
+  local action="$1" prefix=""
+  shift
+  [[ $EUID -ne 0 ]] && prefix="sudo"
+  $prefix systemctl "$action" "$SERVICE_NAME" "$@"
+}
 
 running_pid() {
   [[ -f "$PID_FILE" ]] || return 1
@@ -41,6 +60,11 @@ running_pid() {
 }
 
 start() {
+  if systemd_managed; then
+    echo "本应用由 systemd 单元 $SERVICE_NAME 托管，转给 systemctl（两套启动方式会抢同一个端口）"
+    sysctl_do start
+    return 0
+  fi
   if pid="$(running_pid)"; then
     echo "已在运行（PID $pid，端口 $PORT）"
     return 0
@@ -61,6 +85,11 @@ start() {
 }
 
 stop() {
+  if systemd_managed; then
+    echo "本应用由 systemd 单元 $SERVICE_NAME 托管，转给 systemctl"
+    sysctl_do stop
+    return 0
+  fi
   if pid="$(running_pid)"; then
     kill "$pid" 2>/dev/null || true
     for _ in $(seq 1 20); do
@@ -76,6 +105,11 @@ stop() {
 }
 
 status() {
+  if systemd_managed; then
+    sysctl_do status --no-pager -l | head -n 12 || true
+    echo "健康检查：$(curl -s -o /dev/null -w '%{http_code}' -m 5 "http://127.0.0.1:$PORT/api/health")"
+    return 0
+  fi
   if pid="$(running_pid)"; then
     echo "运行中：PID $pid，端口 $PORT"
     echo "健康检查：$(curl -s -o /dev/null -w '%{http_code}' -m 5 "http://127.0.0.1:$PORT/api/health")"
