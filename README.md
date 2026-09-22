@@ -265,6 +265,10 @@ npm --prefix frontend run build
 
 发布包在本机生成（`data/release/` 下，已被 Git 忽略，不入库），上传后按手册执行即可。
 
+**当前线上状态（2026-09-23 更新）**：<http://123.249.79.118> 已部署通过本地验收的业务版本——
+13 个会议年份、29,072 篇真实论文，统计/图谱/趋势均可用；HTTPS 待域名备案后配置。
+本轮实际部署结果、人工执行时踩到的问题与修复见 `deploy/README.md` 第 11 节。
+
 ```bash
 # 服务器上（Ubuntu 24.04）
 sudo -u cvplatform git clone <CodeArts 仓库地址> /opt/cvplatform

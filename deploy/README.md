@@ -17,8 +17,8 @@
 | 数据目录权限 | `cvplatform` 可写（WAL 需目录写权限） | 见第 3 节校验命令 |
 | Nginx | 1.24.0 (Ubuntu)，静态前端 + `/api/` 代理 | 本轮 `curl -sSI` 实测 |
 | 公网入口 | <http://123.249.79.118>（HTTP 200，健康检查通过） | 本轮实测 |
-| HTTPS | **未配置**（`https://123.249.79.118` 连接被重置） | 本轮实测，需域名与证书 |
-| 域名 | **缺失**，待人工提供 | 无 |
+| HTTPS | **未配置**（`https://123.249.79.118` 连接被重置） | 本轮实测；域名尚未备案，备案后再配证书 |
+| 域名 | **暂不使用**（人工确认：尚未备案，先用 IP） | 人工 |
 
 **只存在于服务器、未纳入版本管理的配置**已在本目录补上脱敏模板：
 
@@ -220,10 +220,43 @@ curl -s -o /dev/null -w '%{time_total}s\n' http://127.0.0.1:8000/api/stats/summa
 | **云端数据源可达** | `for u in https://openaccess.thecvf.com/ https://www.ecva.net/papers.php https://api.openalex.org/works?per_page=1 https://datasets-server.huggingface.co/info; do curl -sI -m 15 "$u" \| head -1; done` | 单篇采集与在线兜底依赖这四个出站地址；若被安全组或代理拦截，采集与「未命中联网检索」会退化为「来源不可用」 |
 | 采集链路端到端 | 在 `/collect` 用库中不存在的题目检索一次 | 返回候选列表或如实报「联网未找到 / 来源不可用」；HTTP 必须是 200 或 502/504（业务结局），不能是 500 |
 
-## 10. 本轮遗留
+## 11. 本轮实际部署记录（2026-09-23）
+
+线上已从阶段 2 的骨架版本更新到通过本地验收的业务版本。
+
+| 项 | 实际结果 |
+|---|---|
+| 更新方式 | 发布包 + `deploy/update.sh --with-db`（人工在服务器执行，本机无 SSH 权限） |
+| 代码与前端 | `/opt/cvplatform/backend`、`/opt/cvplatform/frontend/dist` 已替换；首页引用 `assets/index-DoO3myXm.js`，与本机构建**逐字节一致**（文件名即内容哈希） |
+| 依赖 | 全部 `Requirement already satisfied`（本轮无新增运行时依赖；pyarrow 只在批量导入时按需导入） |
+| 数据库 | `/var/lib/cvplatform/cvplatform.db`，用随包快照替换（替换前已备份）；结构 v1，`PRAGMA integrity_check=ok` |
+| 服务环境 | **原本缺少生产环境变量**，导致启动时报 `PermissionError: '/opt/cvplatform/data'`；新增 `deploy/setup_service_env.sh` 用 systemd drop-in 补上 `EnvironmentFile=/etc/cvplatform.env`，服务恢复 active |
+| 线上数据 | 分母 29,072、13 个会议年份（`coverage_kinds.full=13`）、规则 kw-v4、主题表 topic-v3（40 主题 / 807 别名）；来源分布 huggingface 29,069 + cvf 800 + ecva 400 |
+| 口径一致性 | 榜首主题「三维重建与辐射场」统计 7,546 篇 = 带统计口径的列表 7,546 条 |
+| 页面 | `/`、`/trends`、`/papers`、`/about`、`/collect` 均 200；未知路径经 history 回退也返回 200 |
+| 接口 | 健康检查、概览、榜单、图谱、趋势、关键词状态、论文列表全部 200 |
+| 公网响应时间 | 概览 0.13s、榜单 0.13s、图谱 0.19s、趋势 0.15s（进程内缓存命中） |
+| 云端出站 | `/api/collect/lookup` 用库外的题名「Deep Residual Learning…」→ `remote_candidates`，OpenAlex 返回 5 个候选（3.5 秒） |
+| CRUD | 新增 201（编号 `CVPR-2024-2717`）→ 详情 200 → 编辑 200 → 删除 204 → 再查 404 `paper_not_found`；记录数 29072→29073→29072 |
+| 批量任务 | 预览 200 不写库 → 建任务 202（task 10）→ 终态「成功 0、重复 2、失败 0」并逐条标出现有编号 → 记录数不变 |
+| 重启持久化 | 服务重启后数据与分母不变（数据库在 `/var/lib/cvplatform`，与代码目录分离） |
+
+**副作用（如实记录）**：CRUD 探针占用编号 `CVPR-2024-2717`（编号按设计不复用，探针记录已删除）；批量任务占用 task id 10。
+
+**仍未验证**：域名与 HTTPS（域名未备案，先用 IP）；批量处理期间的 CPU/内存实测需要服务器侧命令
+（建议在导入任务运行时执行 `systemctl show cvplatform.service -p MemoryCurrent` 与 `uptime`）。
+
+**人工执行时踩到的问题与修复（已回灌到脚本）**：CRLF 行尾导致脚本无法执行（新增行尾归一化与自愈头）；
+服务存在性检查方式不可靠（改用 `systemctl cat`）；`/opt/cvplatform/deploy` 名称异常时中止更新（改为跳过并说明）；
+pip 以 cvplatform 身份装不进 root 属主的 venv（改为按 venv 属主选择身份）；重启前未校验服务是否指向生产库
+（新增启动前拦截与 `setup_service_env.sh`）。
+
+## 12. 本轮遗留
 
 - **无 SSH 权限**：本机公钥未授权到服务器，第 4–7 节需要人工执行，或授权后由我执行；
 - **无域名与证书**：HTTPS 未配置，`server_name` 暂用 IP，待域名提供后按 `nginx.conf.example` 的
   HTTPS 段启用并验证；
 - `KEYWORD_VERSION_KEEP`（旧规则版本清理份数）在设计文档里提到，但**代码尚未实现**，
-  已从 `env.example` 移除，避免出现「改了却不生效」的配置项。
+  已从 `env.example` 移除，避免出现「改了却不生效」的配置项；
+- 首次更新时服务器上的 `cvplatform.service` 缺少生产环境变量，已由 `setup_service_env.sh`
+  以 drop-in 方式补齐（未改动原单元文件）；后续重装系统或重建服务时需再执行一次该脚本。
