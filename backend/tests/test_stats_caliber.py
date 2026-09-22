@@ -265,7 +265,8 @@ def test_trend_distinguishes_missing_data_from_zero(caliber):
     assert iccv_2024["denominator"] == 0
     assert iccv_2024["share"] is None
     assert iccv_2024["has_data"] is False
-    assert iccv_2024["reason"] == "no_records_in_sample"
+    # ICCV 只有奇数年：2024 年不举办，与「该届没采到数据」是两回事（画法也不同）
+    assert iccv_2024["reason"] == "not_a_conference_year"
 
 
 def test_trend_returns_zero_for_unknown_topic_but_has_data(caliber):
@@ -422,3 +423,26 @@ def test_reset_engine_for_fixture(temp_db: Path):
     reset_engine()
     with session_scope() as session:
         assert stats.total_sample(session, stats.parse_scope()) >= 0
+
+
+def test_trend_distinguishes_not_held_years_from_data_gaps(caliber):
+    """该届不举办（ICCV 偶数年）与「该届没采到数据」必须区分：
+
+    - ICCV 2024 不举办 → reason = not_a_conference_year（曲线跨过连线）
+    - ICCV 2025 有记录、ECCV 2022 有记录 → 正常返回
+    两者在界面上的画法不同，前端据此决定断开还是连线。
+    """
+    with session_scope() as session:
+        result = stats.trend(
+            session, stats.parse_scope(), keys=["object-detection"]
+        )
+    points = {
+        (point["conference"], point["year"]): point for point in result["series"][0]["points"]
+    }
+    assert points[("ICCV", 2024)]["reason"] == "not_a_conference_year"
+    assert points[("ECCV", 2023)]["reason"] == "not_a_conference_year"
+    # 夹具里 ICCV 2023 与 ECCV 2022 都有记录：不是缺失
+    assert points[("ICCV", 2023)]["has_data"] is True
+    assert points[("ECCV", 2022)]["has_data"] is True
+    # CVPR 每年举办，夹具里 2023 没有记录 → 真缺口
+    assert points[("CVPR", 2023)]["reason"] == "no_records_in_sample"

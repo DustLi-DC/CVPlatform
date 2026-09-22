@@ -113,7 +113,8 @@ const trendLegend = computed(() => [
         shape: 'line' as const,
       }))
     : []),
-  { label: '无数据区间', color: 'var(--color-inactive)', shape: 'block' as const },
+  { label: '无数据区间（该届有会议但未采到）', color: 'var(--color-inactive)', shape: 'block' as const },
+  { label: '该届不举办', color: 'var(--color-border-strong)', shape: 'block' as const },
 ])
 
 const trendLines = computed<TrendLine[]>(() => {
@@ -142,9 +143,15 @@ const trendLines = computed<TrendLine[]>(() => {
               ? point.share
               : point.count,
         ),
-        // 该会议在哪些年份完全没有记录：画灰色区间，与「0 篇」区分开
+        // 真缺口（该届有会议但没采到数据）→ 断开并标灰；该届不举办 → 跨过该年份连线
         missingYears: points.flatMap((point, index) =>
-          point !== null && point.reason === 'no_records_in_sample'
+          point !== null &&
+          (point.reason === 'no_records_in_sample' || point.reason === 'no_analysis_paper')
+            ? [data.years[index] ?? 0]
+            : [],
+        ),
+        absentYears: points.flatMap((point, index) =>
+          point !== null && point.reason === 'not_a_conference_year'
             ? [data.years[index] ?? 0]
             : [],
         ),
@@ -194,11 +201,20 @@ const coverageHint = computed(() => {
   return parts.join('')
 })
 
-/** 当前年份下哪些会议没有记录（对应原型趋势页的灰色区间提示） */
+/** 当前年份下真正缺数据的会议（区别于「该届不举办」） */
 const missingNow = computed(() =>
   sideRows.value
     .filter((row) =>
       row.cells.some((cell) => cell.point?.reason === 'no_records_in_sample'),
+    )
+    .map((row) => row.conference),
+)
+
+/** 当前年份下本来就不举办的会议（ICCV 偶数年、ECCV 奇数年） */
+const absentNow = computed(() =>
+  sideRows.value
+    .filter((row) =>
+      row.cells.some((cell) => cell.point?.reason === 'not_a_conference_year'),
     )
     .map((row) => row.conference),
 )
@@ -668,7 +684,11 @@ watch(() => route.query.kw, applyRouteQuery)
 
         <template #footnote>
           <span>
-            <strong>断点</strong>：该会议当年在库中没有记录（不等于热度为 0），图中画成灰色区间并断开曲线。
+            <strong>该届不举办</strong>：如 ICCV 偶数年、ECCV 奇数年没有会议，曲线跨过该年份直接连线，
+            图上用浅色区间标注——这不是数据缺口。
+          </span>
+          <span>
+            <strong>断点</strong>：该届举办了但库里没有采到数据（不等于热度为 0），画灰色区间并断开曲线。
           </span>
           <span>
             <strong>0 轴上的点</strong>：该会议当年有样本，但没有匹配该主题的论文。
@@ -681,9 +701,8 @@ watch(() => route.query.kw, applyRouteQuery)
             比较多个主题时<strong>线型</strong>表示主题、<strong>颜色</strong>表示会议。
           </span>
           <span>
-            本样本每个会议只有两个年份（CVPR 2024/2025、ICCV 2023/2025、ECCV 2022/2024），
-            因此同一会议的相邻年份线段只在 CVPR 2024→2025 处出现；其余年份按缺失处理并断开，
-            这不是「热度为 0」。
+            当前覆盖 2020—2026：CVPR 每年都有数据（曲线连续），ICCV 只有奇数年、ECCV 只有偶数年——
+            这两种会议在「不举办」的年份由曲线跨过连线，而不是断开。
           </span>
         </template>
       </ChartContainer>
@@ -731,7 +750,13 @@ watch(() => route.query.kw, applyRouteQuery)
                   </th>
                   <td v-for="cell in row.cells" :key="`${row.conference}-${cell.key}`">
                     <span
-                      v-if="!cell.point || cell.point.reason === 'no_records_in_sample'"
+                      v-if="!cell.point || cell.point.reason === 'not_a_conference_year'"
+                      class="sample-none"
+                    >
+                      该届不举办
+                    </span>
+                    <span
+                      v-else-if="cell.point.reason === 'no_records_in_sample'"
                       class="sample-none"
                     >
                       无记录
@@ -752,12 +777,15 @@ watch(() => route.query.kw, applyRouteQuery)
           <ul class="side-notes">
             <li>· 占比 = 某会议某年份包含该主题的论文数 ÷ 该会议该年份纳入分析的论文总数 × 100%。</li>
             <li>· 分母只含「会议年份有效、标题可用、关键词已按当前规则版本处理完成」的论文。</li>
-            <li>· 某会议年份在库中没有记录时<b>不画成 0</b>，而是断开曲线并标注灰色区间。</li>
-            <li>· ICCV 为奇数年、ECCV 为偶数年，未采集的年份自然显示为无记录区间。</li>
+            <li>· 该届不举办的年份（ICCV 偶数年、ECCV 奇数年）曲线跨过该年份连线，不画成 0。</li>
+            <li>· 该届举办了但没采到数据的年份<b>断开曲线</b>并标注灰色区间，与 0 热度区分开。</li>
           </ul>
           <p v-if="coverageHint" class="side-hint">{{ coverageHint }}</p>
+          <p v-if="absentNow.length" class="side-hint">
+            {{ absentNow.join('、') }} 在 {{ currentYearText }} 年不举办会议，曲线跨过该年份连线。
+          </p>
           <p v-if="missingNow.length" class="side-hint">
-            {{ missingNow.join('、') }} 在 {{ currentYearText }} 年没有可用数据，曲线在该年份断开。
+            {{ missingNow.join('、') }} 在 {{ currentYearText }} 年举办了但库里没有数据，曲线在该年份断开。
           </p>
           <p v-if="zeroNow.length" class="side-hint">
             {{ zeroNow.join('、') }} 在 {{ currentYearText }} 年有样本但没有匹配该主题的论文，落在 0 轴。

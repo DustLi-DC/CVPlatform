@@ -5,8 +5,11 @@
  * - 横轴为年份，纵轴按「占比（%）」或「论文数（篇）」切换，单位在图例与轴名上标明；
  * - 一条曲线 = 一个会议（配色沿用全站会议色）；比较多个主题时用线型区分主题，
  *   颜色始终表示会议，避免两套含义混在同一个视觉通道里；
- * - **没有记录的年份用 null 形成断点**，并在图上画出灰色区间；有样本但计数为 0
- *   的点落在 0 轴上——两种情况必须能区分开（null 与 0 在 ECharts 里画法不同）；
+ * - 缺失分两种，画法不同：
+ *   1) **该届不举办**（ICCV 偶数年、ECCV 奇数年）：画浅色区间并标注「该届不举办」，
+ *      曲线**跨过该年份连线**——这不是数据缺口，断开会让读者以为是采集缺失；
+ *   2) **该届没有采到数据**：画灰色区间并标注「无数据」，曲线**断开**，不跨过；
+ * - 有样本但计数为 0 的点落在 0 轴上——与上面两种情况都不同（null 与 0 在 ECharts 里画法不同）；
  * - 当前年份用虚线标注，播放时随年份前移；
  * - 点击曲线数据点或年份区间可跳转到该年份（emit selectYear）。
  *
@@ -37,8 +40,10 @@ export interface TrendLine {
   lineType: 'solid' | 'dashed' | 'dotted'
   /** 与 years 等长的取值，null 表示该年份没有记录 */
   values: (number | null)[]
-  /** 该线在这些年份完全没有记录：画灰色区间，与「计数为 0」区分开 */
+  /** 该线在这些年份没有采到数据（真缺口）：画灰色区间，曲线断开 */
   missingYears?: number[]
+  /** 该线在这些年份该届不举办（如 ICCV 偶数年）：画浅色区间，曲线跨过该年份连线 */
+  absentYears?: number[]
 }
 
 const props = withDefaults(
@@ -74,8 +79,10 @@ type ChartOption = ComposeOption<
 >
 
 /** markArea 的两维元组类型：需要恰好两个端点，写成元组才能满足 ECharts 的类型 */
+type MarkAreaLabel = { show: boolean; color?: string; fontSize?: number; formatter?: string }
+
 type MarkAreaPair = [
-  { xAxis: string; itemStyle?: { color: string }; label?: { show: boolean; color?: string; fontSize?: number } },
+  { xAxis: string; itemStyle?: { color: string }; label?: MarkAreaLabel },
   { xAxis: string },
 ]
 
@@ -109,13 +116,28 @@ function buildOption(): ChartOption {
       min: 0,
     },
     series: props.lines.map((line, index) => {
-      // 「无数据」文字只标在第一个区间上：每个缺失年份都写一遍会在图顶挤成一排，
-      // 反而看不清；灰色色块本身已经把范围标出来了，具体解释放在图下方说明里
+      // 两类缺失分别画区间：真缺口用灰色 + 「无数据」，不举办的届用更浅的色 + 「该届不举办」。
+      // 文字只标在每个系列的第一个同名区间上：每个年份都写一遍会在图顶挤成一排。
+      const hasRealGap = (line.missingYears ?? []).length > 0
       const missingAreas: MarkAreaPair[] = (line.missingYears ?? []).map((year, areaIndex) => [
         {
           xAxis: String(year),
           itemStyle: { color: 'rgba(148, 163, 184, 0.18)' },
-          label: areaIndex === 0 ? { show: true, color: '#94a3b8', fontSize: 10 } : { show: false },
+          label:
+            areaIndex === 0
+              ? { show: true, color: '#94a3b8', fontSize: 10, formatter: '无数据' }
+              : { show: false },
+        },
+        { xAxis: String(year) },
+      ])
+      const absentAreas: MarkAreaPair[] = (line.absentYears ?? []).map((year, areaIndex) => [
+        {
+          xAxis: String(year),
+          itemStyle: { color: 'rgba(203, 213, 225, 0.10)' },
+          label:
+            areaIndex === 0
+              ? { show: true, color: '#cbd5e1', fontSize: 10, formatter: '该届不举办' }
+              : { show: false },
         },
         { xAxis: String(year) },
       ])
@@ -123,8 +145,8 @@ function buildOption(): ChartOption {
         id: line.key,
         name: line.label,
         type: 'line',
-        // null 表示没有记录：断开曲线，不连成直线，也不当作 0
-        connectNulls: false,
+        // 真缺口必须断开；只有「该届不举办」造成的空档才跨过连线（不伪造数据点）
+        connectNulls: hasRealGap === false,
         data: line.values,
         symbol: 'circle',
         symbolSize: 7,
@@ -136,14 +158,10 @@ function buildOption(): ChartOption {
           type: line.lineType,
         },
         emphasis: { focus: 'series' },
-        markArea: missingAreas.length
-          ? {
-              silent: true,
-              data: missingAreas,
-              label: { show: true, color: '#94a3b8', fontSize: 10, formatter: '无数据' },
-              // 只标注第一个区间（其余区间的 label 在数据里关闭）
-            }
-          : undefined,
+        markArea:
+          missingAreas.length || absentAreas.length
+            ? { silent: true, data: [...missingAreas, ...absentAreas] }
+            : undefined,
         markLine:
           index === 0 && props.currentYear !== null
             ? {

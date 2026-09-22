@@ -23,6 +23,21 @@ from pathlib import Path
 # 允许的三个会议，全项目共用这一处定义
 CONFERENCES: tuple[str, ...] = ("CVPR", "ICCV", "ECCV")
 
+# 会议举办规律：CVPR 每年、ICCV 奇数年、ECCV 偶数年（可在官方入口按年份核对）。
+# 用于区分「该届不举办」与「该届没有采到数据」——前者曲线可以跨过该年份连线，
+# 后者必须断开并标注为数据缺口。
+CONFERENCE_CADENCE: dict[str, str] = {"CVPR": "annual", "ICCV": "odd", "ECCV": "even"}
+
+
+def holds_conference(conference: str, year: int) -> bool:
+    """该会议在指定年份是否举办。未知会议按「每年举办」处理（不臆断）。"""
+    cadence = CONFERENCE_CADENCE.get(conference, "annual")
+    if cadence == "odd":
+        return year % 2 == 1
+    if cadence == "even":
+        return year % 2 == 0
+    return True
+
 # 数据状态与关键词处理状态的取值，与前端类型和多处校验共用
 DATA_STATUSES: tuple[str, ...] = ("complete", "review", "failed")
 ABSTRACT_STATUSES: tuple[str, ...] = ("present", "missing")

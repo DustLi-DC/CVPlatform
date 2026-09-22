@@ -31,6 +31,7 @@ from sqlmodel import Session
 
 from ..config import (
     CONFERENCES,
+    holds_conference,
     HARVEST_SAMPLE_LIMIT,
     STATS_CACHE_MAX_ENTRIES,
     STATS_DEFAULT_GROUP_BY,
@@ -789,7 +790,14 @@ def trend(
                 cell_base = cell_denominator.get(cell, 0)
                 has_records = records.get(cell, 0) > 0
                 if not has_records:
-                    # 该会议年份在本平台没有记录：不能据此判断该届是否举办
+                    # 区分「该届不举办」（ICCV 偶数年、ECCV 奇数年）与「该届没有采到数据」：
+                    # 前者的曲线可以跨过该年份连线并标注「该届不举办」，
+                    # 后者必须断开并标注为数据缺口，不能画成 0 也不能连线掩盖。
+                    reason = (
+                        "not_a_conference_year"
+                        if not holds_conference(conference, year)
+                        else "no_records_in_sample"
+                    )
                     points.append(
                         {
                             "conference": conference,
@@ -798,7 +806,7 @@ def trend(
                             "denominator": 0,
                             "share": None,
                             "has_data": False,
-                            "reason": "no_records_in_sample",
+                            "reason": reason,
                         }
                     )
                     continue

@@ -446,9 +446,17 @@ const dataSources = [
       </p>
       <div class="distinction-grid">
         <div class="distinction-card">
-          <h3 class="distinction-title">没有可用数据</h3>
+          <h3 class="distinction-title">该届不举办</h3>
           <p class="distinction-desc">
-            该会议当年没有纳入分析（如 ICCV 的偶数年）。趋势图中显示为灰色区间，<strong>不画成 0</strong>。
+            ICCV 只有奇数年、ECCV 只有偶数年，不举办的年份没有会议。趋势图中曲线<strong>跨过该年份连线</strong>，
+            并用浅色区间标注，<strong>不画成 0</strong>。
+          </p>
+        </div>
+        <div class="distinction-card">
+          <h3 class="distinction-title">该届举办了但没采到数据</h3>
+          <p class="distinction-desc">
+            例如 ECCV 2026 的摘要在核对时只有 71%（数据仍在补齐）而未纳入。趋势图中<strong>断开曲线</strong>并标注
+            「无数据」，与「热度为 0」区分开。
           </p>
         </div>
         <div class="distinction-card">
