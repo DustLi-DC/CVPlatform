@@ -1,21 +1,33 @@
 # CVPlatform
 
-计算机视觉顶会论文分析平台，采用 Vue 3 前端与 Python / FastAPI 后端。
+计算机视觉顶会论文分析平台（课程作业）。把 CVPR、ICCV、ECCV 的论文题目与摘要集中起来，
+用**关键词统计**回答三个问题：哪些方向在被反复研究、它们在几年里怎么变、以及这些方向上有哪些论文可读。
 
-当前进度：论文管理与论文详情已接入真实后端接口（SQLite 持久化）；单篇采集与批量导入已接入真实
-外部来源（CVF Open Access、ECVA 与 OpenAlex 兜底检索），关键词抽取规则按 1200 篇真实样本校准到
-`kw-v3`；统计后端（概览、热点 Top、共现图谱、热度趋势）已就绪，口径为「分析集合去重论文数」。
-热门方向总览与热度走势对比都已接入统计接口：总览给出 Top 10、关键词图谱与数据覆盖说明；
-趋势页支持多主题、跨会议、年份范围的逐年对比与播放动画（占比/论文数可切换），
-缺失年份断开曲线、零值落在 0 轴，并可带着当前口径跳到相关论文。
+面向刚接触计算机视觉的同学：先看榜单与图谱建立整体印象，再顺着热词进入论文列表与详情精读。
+结果只描述「本平台采集到的这个样本」，不等同于整届大会或整个领域的结论。
 
-## 开发环境
+## 五项核心能力
 
-- Python 3.12（项目根目录 `.venv`，与系统 Python 隔离）
-- Node.js 24.15.0、npm 11.12.1
-- 前端：Vue 3、Vite、TypeScript、Vue Router
-- 后端：FastAPI、Uvicorn、SQLModel、python-multipart
-- 图表：ECharts（阶段 8 引入，按需注册 graph 图表与 canvas 渲染器，不整包引入）
+| # | 能力 | 入口 |
+|---|---|---|
+| 1 | 单篇采集 / 批量导入，产出摘要、关键词与原文链接 | 采集与导入 `/collect` |
+| 2 | 论文增删改查；本地未命中时联网检索候选 | 论文管理 `/papers`、详情 `/papers/:id` |
+| 3 | Top 10 热门方向（按去重关联论文数） | 热门方向总览 `/` |
+| 4 | 可点击的关键词共现图谱 | 热门方向总览 `/` |
+| 5 | CVPR / ICCV / ECCV 多年热度比较动画 | 热度走势对比 `/trends` |
+
+## 开发环境（本机实测版本）
+
+- Python 3.12.6（项目根目录 `.venv`，与系统 Python 隔离）
+- Node.js v24.15.0、npm 11.12.1
+
+## 技术栈与运行形态
+
+- 后端：Python 3.12、FastAPI、Uvicorn、SQLModel、SQLite（WAL）；**单 worker**，后台任务单线程串行执行。
+- 前端：Vue 3、TypeScript、Vite、Vue Router、ECharts（按需注册、异步加载）。
+- 生产：华为云 Ubuntu 24.04（2 核 / 2 GB / 2 Mbps），代码放 `/opt/cvplatform`，
+  数据库放 `/var/lib/cvplatform`，systemd 服务 `cvplatform.service`，
+  Nginx 提供前端静态文件并把 `/api/` 反向代理到 `127.0.0.1:8000`。
 
 ## 目录
 
@@ -23,118 +35,245 @@
 CVPlatform/
 ├── backend/
 │   ├── app/
-│   │   ├── config.py     # 配置与数据库路径解析（开发/测试/生产）
-│   │   ├── db/           # 引擎、会话与版本化迁移
-│   │   ├── models/       # SQLModel 实体
-│   │   ├── schemas/      # 请求与响应契约
-│   │   ├── data/         # 版本化主题表 topics_v1.json（人工复核后可提交）
-│   │   ├── services/     # 论文服务层、关键词抽取、统计口径、采集编排与外部来源
-│   │   ├── routers/      # /api/papers、/api/collect、/api/import、/api/stats、/api/keywords
-│   │   └── main.py       # 应用入口、统一错误响应、健康检查
-│   ├── tests/            # 独立临时数据库上的测试
-│   ├── requirements.txt     # 运行时依赖
-│   └── requirements-dev.txt # 开发与测试依赖（生产不装）
-├── deploy/               # 生产配置模板、备份脚本、升级回退说明
+│   │   ├── config.py          # 配置与数据库路径解析（开发/测试/生产）
+│   │   ├── data/              # 版本化主题表 topics_v1.json（人工复核后可提交）
+│   │   ├── db/                # 引擎、会话与版本化迁移（PRAGMA user_version）
+│   │   ├── models/            # SQLModel 实体定义
+│   │   ├── schemas/           # 请求与响应契约
+│   │   ├── services/          # 论文、关键词、采集、导入、统计、主题归并、维护
+│   │   │   └── sources/       # 外部来源：CVF Open Access / ECVA / OpenAlex
+│   │   ├── routers/           # /api/papers、/api/collect、/api/import、/api/stats、/api/keywords
+│   │   ├── harvest_cli.py     # 真实数据采集命令
+│   │   ├── maintenance_cli.py # 状态、按需重算、主题重载、实体修复、独立复算
+│   │   └── main.py            # 应用入口、统一错误响应、健康检查
+│   ├── tests/                 # 独立临时数据库上的测试（不触碰开发与生产数据）
+│   ├── requirements.txt       # 运行时依赖
+│   └── requirements-dev.txt   # 开发与测试依赖（生产不装）
+├── deploy/                    # 生产配置模板、备份脚本、升级与回退说明、可分发样例
 ├── frontend/
 │   ├── src/
-│   │   ├── api/          # HTTP 请求（health、paperApi、collectApi、importApi、statsApi）
-│   │   ├── components/   # 可复用组件
-│   │   ├── composables/  # 组合式函数（轻提示）
-│   │   ├── demo/         # 尚未接入接口的页面所用演示数据
-│   │   ├── layouts/      # 公共布局
-│   │   ├── router/       # 六个页面路由
-│   │   ├── styles/       # 设计令牌与公共 UI 样式
-│   │   ├── types/        # 领域类型（字段与后端契约一致，含统计与分组配色）
-│   │   └── views/        # 页面组件
-│   ├── package.json
-│   └── package-lock.json
-└── .venv/               # 本地虚拟环境，不提交到 Git
+│   │   ├── api/               # HTTP 请求（health、paperApi、collectApi、importApi、statsApi）
+│   │   ├── components/        # 可复用组件（含 ECharts 图谱与趋势曲线）
+│   │   ├── composables/       # 组合式函数（轻提示、ECharts 按需注册）
+│   │   ├── demo/              # 仍使用演示常量的地方（论文表单年份选项、关于页兜底）
+│   │   ├── layouts/           # 公共布局
+│   │   ├── router/            # 六个页面路由与数据来源标记
+│   │   ├── styles/            # 设计令牌与公共 UI 样式
+│   │   ├── types/             # 领域类型（字段与后端契约一致）
+│   │   └── views/             # 页面组件
+│   └── package.json / package-lock.json
+├── 数据覆盖与来源.md          # 数据侧事实：来源、抽样规则、覆盖、复现命令、缺口
+└── codestyle.md               # 代码规范
 ```
 
 ## 页面入口
 
 | 路径 | 页面 | 数据来源 |
 |---|---|---|
-| `/` | 热门方向总览 | **后端接口 `/api/stats/{summary,top,graph}`**（ECharts 图谱） |
-| `/trends` | 热度走势对比 | **后端接口 `/api/stats/{summary,trend,top}`**（ECharts 曲线 + 播放动画） |
-| `/papers` | 论文管理 | **后端接口 `/api/papers`** |
-| `/papers/:id` | 论文详情 | **后端接口 `/api/papers/{id}`** |
-| `/collect` | 采集与导入 | **后端接口 `/api/collect/*`、`/api/import/*`** |
-| `/about` | 关于平台 | 静态说明 |
+| `/` | 热门方向总览 | 后端接口 `/api/stats/{summary,top,graph}`（ECharts 图谱） |
+| `/trends` | 热度走势对比 | 后端接口 `/api/stats/{summary,trend,top}`（ECharts 曲线 + 播放动画） |
+| `/papers` | 论文管理 | 后端接口 `/api/papers` |
+| `/papers/:id` | 论文详情 | 后端接口 `/api/papers/{id}` |
+| `/collect` | 采集与导入 | 后端接口 `/api/collect/*`、`/api/import/*` |
+| `/about` | 关于平台 | 后端接口 `/api/stats/coverage` + 静态说明 |
 
 数据边界：已接入接口的页面直接显示数据库内容，不混用演示数据；未接入的页面在页头标注
-「演示数据 / 尚未接入后端接口」，且不显示虚假的处理进度。
+「演示数据 / 尚未接入后端接口」，不显示虚假的处理进度。缺失值显示为「—」或「无记录」，不写成 0。
 
-趋势页的「进入论文管理」同样带上 `from_stats=true`，并把年份收窄到当前播放年份，
-便于直接查看「这一年这个方向」的论文。
+## 安装
 
-从总览页跳转到论文列表时会带上 `from_stats=true`（连同当前会议、年份与主题条件），
-后端据此强制应用统计口径（只算系统关键词、只认当前规则版本、限制在分析集合内），
-使列表条数与统计给出的计数一致；列表页会把这一口径显示为一条「统计口径」条件。
-
-## 统计口径与维护命令
-
-统计只读两个视图（`v_analysis_paper`、`v_analysis_keyword`）：只有「会议年份有效、标题可用、
-关键词已按当前规则版本处理完成」的论文才进入分母，且只统计系统抽取的关键词。
-「关键词处理成功但结果为空」的论文仍计入分母；待处理、失败与旧版本的论文不计入分母，
-但在响应的 `excluded` 字段里单列。缺失与零严格区分：分母为零或会议年份无记录时返回 `null`，
-有样本但主题不存在时返回 `0`。
-
-维护命令（在仓库根目录执行，`PYTHONPATH=backend`）：
-
-```powershell
-$env:PYTHONPATH = "backend"
-# 关键词处理现状（分母、待处理量、主题映射覆盖）
-.\.venv\Scripts\python.exe -m app.maintenance_cli status
-# 按需处理待处理或待重算的论文；--force 表示对语料全量重算
-.\.venv\Scripts\python.exe -m app.maintenance_cli process-keywords --force
-# 重新载入主题表并重算关键词的主题映射
-.\.venv\Scripts\python.exe -m app.maintenance_cli reload-topics
-# 用独立 SQL 复算统计结果，并测量各接口耗时与内存峰值
-.\.venv\Scripts\python.exe -m app.maintenance_cli verify-stats
-```
-
-## 安装依赖
-
-首次取得仓库后，在项目根目录执行以下 PowerShell 命令。当前电脑已完成安装，可直接启动。
+在项目根目录执行（Windows PowerShell；当前开发机已完成安装，可直接跳到「启动」）：
 
 ```powershell
 py -3.12 -m venv .venv
 .\.venv\Scripts\python.exe -m pip install -r backend\requirements.txt
+.\.venv\Scripts\python.exe -m pip install -r backend\requirements-dev.txt   # 仅开发与测试需要
 npm --prefix frontend ci
 ```
 
-## 启动开发服务
+Linux 服务器上把解释器路径换成 `.venv/bin/python`，其余命令相同。
+
+## 配置
+
+| 环境变量 | 作用 | 默认值 |
+|---|---|---|
+| `CVPLATFORM_ENV` | 运行环境：`development` / `test` / `production` | `development` |
+| `CVPLATFORM_DB_PATH` | 直接指定数据库文件路径（优先级最高） | 见下 |
+| `HARVEST_SAMPLE_LIMIT` | 每个会议年份的采集条数 | `200` |
+| `IMPORT_MAX_ROWS` / `IMPORT_MAX_BYTES` | 批量导入的行数与文件大小上限 | `500` / `2 MB` |
+| `STATS_DEFAULT_GROUP_BY` | 统计默认分组：`topic` / `keyword` | `topic` |
+
+数据库路径解析顺序（`backend/app/config.py`）：
+
+1. `CVPLATFORM_DB_PATH` 有值 → 直接使用；
+2. `CVPLATFORM_ENV=production` → `/var/lib/cvplatform/cvplatform.db`；
+3. `CVPLATFORM_ENV=test` → 系统临时目录下按进程唯一命名；
+4. 其他（开发默认）→ `<仓库根>/data/cvplatform.db`（已被 `.gitignore` 忽略）。
+
+开发默认路径锚定仓库根而不依赖启动时的工作目录，因此在任意目录启动都指向同一个数据库。
+生产配置模板见 `deploy/env.example`，服务与权限说明见 `deploy/README.md`。
+
+## 启动
 
 在项目根目录打开两个终端。
 
-终端一，启动后端：
-
 ```powershell
+# 终端一：后端（开发用 --reload；生产由 systemd 启动，单 worker）
 .\.venv\Scripts\python.exe -m uvicorn app.main:app --app-dir backend --reload --host 127.0.0.1 --port 8000
-```
 
-终端二，启动前端：
-
-```powershell
+# 终端二：前端
 npm --prefix frontend run dev
 ```
 
 - 前端页面：<http://127.0.0.1:5173>
 - 后端健康检查：<http://127.0.0.1:8000/api/health>
-- 后端接口文档：<http://127.0.0.1:8000/docs>
+- 接口文档（Swagger UI）：<http://127.0.0.1:8000/docs>
 
-前端通过相对路径 `/api/health` 请求接口，Vite 将 `/api` 代理到本地后端。后端连接状态显示在每个页面页脚（含“重新检查”），后端未启动时显示“未连接”。上述代理仅用于开发；部署时需要由 Web 服务器配置相应代理。
+前端通过相对路径请求 `/api`，Vite 在开发时把它代理到本地后端；部署时由 Nginx 承担这一层代理。
 
-命令直接使用虚拟环境中的解释器，无须更改 PowerShell 执行策略或激活环境。
-
-## 验证与构建
+## 构建
 
 ```powershell
-.\.venv\Scripts\python.exe -m pip check
+npm --prefix frontend run build          # 含 TypeScript 检查，产物在 frontend/dist
+.\.venv\Scripts\python.exe -m pip check  # 依赖一致性检查
+```
+
+## 数据来源
+
+| 来源 | 覆盖 | 字段 | 官方入口 |
+|---|---|---|---|
+| CVF Open Access | CVPR、ICCV | 题目、作者、摘要、原文 PDF/落地页 | <https://openaccess.thecvf.com/> |
+| ECVA | ECCV | 同上（ECVA 按年份汇总论文页） | <https://www.ecva.net/papers.php> |
+| OpenAlex | 在线兜底检索 | 题目、年份、DOI、摘要倒排索引、类型 | <https://openalex.org/> |
+
+- **实测不可用**：DBLP 返回反爬页面（Anubis），带浏览器标识也被拦截，因此未接入；
+  Semantic Scholar 公开接口在测试中触发限流，只作为可选说明保留。
+- 采集规则：按会议年份索引页做确定性的等距抽样（步长 = 索引总数 ÷ 目标条数），
+  每篇记录来源标识与获取时间，可逐条核对；外部请求带超时、限流与有限重试。
+- 当前覆盖：6 个会议年份 × 200 篇 = 1200 篇（CVPR 2024/2025、ICCV 2023/2025、ECCV 2022/2024）。
+  逐组合的来源、样本量、摘要与关键词情况、去重与缺口见 [数据覆盖与来源.md](数据覆盖与来源.md)。
+
+## 统计口径
+
+所有统计只读两个 SQL 视图（`v_analysis_paper`、`v_analysis_keyword`），口径集中在这一处：
+
+- **分母** = 分析集合的论文数：会议年份有效、标题可用、关键词已按当前规则版本处理完成；
+  **关键词处理成功但结果为空仍计入**；
+- **只统计系统提取的关键词**；作者关键词只做展示，不参与榜单、图谱与趋势；
+- **去重**：同一篇论文对同一主题只计一次；跨会议年份汇总时先合并计数与分母，再相除；
+- **缺失与零分开**：没有记录时返回 `null`（图表断线并标注无数据区间），有样本但计数为 0 时返回
+  `0`（落在 0 轴）；
+- 被排除的论文（待处理 / 失败 / 旧规则版本 / 标题不可用）在响应的 `excluded` 字段单列，四个计数互斥。
+
+主题归并层：关键词 → 主题（`topic` + `topic_alias`，版本化文件 `backend/app/data/topics_v1.json`）。
+归并只影响统计展示，详情页始终展示系统抽到的原始关键词；映射不到的关键词如实标为「未归类」，
+其数量在界面说明中给出。
+
+从总览页或趋势页跳到论文列表时会带 `from_stats=true`，后端据此强制应用同一套口径
+（只算系统关键词、只认当前规则版本、限制在分析集合内），使**列表条数与统计计数一致**。
+
+## 接口与复现入口
+
+| 入口 | 说明 |
+|---|---|
+| `GET /api/health` | 健康检查（含数据库路径与结构版本） |
+| `GET /api/papers`、`/api/papers/{id}` | 论文检索（分页、排序、精确/模糊、组合筛选）与增删改查 |
+| `POST /api/collect/lookup`、`/api/collect/confirm` | 单篇采集与候选确认 |
+| `POST /api/import/preview`、`/api/import/tasks` | 批量导入预览与任务（TXT/CSV、重试、重启续跑） |
+| `GET /api/stats/summary`、`/top`、`/graph`、`/trend`、`/coverage` | 概览、榜单、图谱、趋势、覆盖明细 |
+| `GET /api/keywords/status`、`POST /api/keywords/process`、`POST /api/keywords/topics/reload` | 关键词处理现状、按需处理、主题表重载 |
+
+命令行入口（在仓库根目录，先设 `PYTHONPATH=backend`）：
+
+```powershell
+$env:PYTHONPATH = "backend"
+# 真实数据采集：--plan 只打印抽样计划；--run 创建任务并处理；中断后重跑即可续做
+.\.venv\Scripts\python.exe -m app.harvest_cli --plan
+.\.venv\Scripts\python.exe -m app.harvest_cli --run
+# 关键词与统计维护
+.\.venv\Scripts\python.exe -m app.maintenance_cli status
+.\.venv\Scripts\python.exe -m app.maintenance_cli process-keywords --force
+.\.venv\Scripts\python.exe -m app.maintenance_cli reload-topics
+.\.venv\Scripts\python.exe -m app.maintenance_cli fix-entities --apply
+# 导入课程数据集或可分发样例（JSON），复用同一套清洗、去重与关键词逻辑
+.\.venv\Scripts\python.exe -m app.maintenance_cli import-dataset deploy/sample/cvplatform_sample.json
+# 用独立写的 SQL 复算统计结果，并测量接口耗时与内存峰值
+.\.venv\Scripts\python.exe -m app.maintenance_cli verify-stats
+```
+
+从空库复现完整流程（约 20 分钟，取决于网络）：
+
+```powershell
+$env:CVPLATFORM_DB_PATH = "$PWD\data\acceptance\cvplatform.db"   # 独立数据库，不影响开发库
+$env:PYTHONPATH = "backend"
+.\.venv\Scripts\python.exe -c "from app.db.engine import init_database; print(init_database())"
+.\.venv\Scripts\python.exe -m app.harvest_cli --run              # 采集 6 个会议年份各 200 篇
+.\.venv\Scripts\python.exe -m app.maintenance_cli reload-topics  # 载入主题表并映射关键词
+.\.venv\Scripts\python.exe -m app.maintenance_cli verify-stats   # 独立复算统计结果
+```
+
+也可用可分发样例（10 条真实记录，见 `deploy/sample/`）快速验证导入链路：
+
+```powershell
+$env:PYTHONPATH = "backend"
+.\.venv\Scripts\python.exe -m app.maintenance_cli import-dataset deploy/sample/cvplatform_sample.json
+```
+
+## 测试与验证
+
+```powershell
+# 后端：使用独立临时数据库，不触碰开发与生产数据
+.\.venv\Scripts\python.exe -m pytest backend\tests -q
+# 前端：类型检查 + 生产构建
 npm --prefix frontend run build
 ```
 
-前端构建命令包含 TypeScript 检查，输出位于 `frontend/dist`。依赖目录、虚拟环境及构建产物已由 Git 忽略规则排除。
+测试覆盖数据模型与迁移、CRUD 与检索、错误契约、采集与候选确认、批量导入的任务生命周期、
+关键词规则与校准、统计口径（可手算数据集）、主题归并与维护、统计页跳转列表的口径一致性。
 
-页面结构与交互可在浏览器中核对：六个路由均可直接访问与刷新（Vue Router history 模式，部署时需由 Web 服务器配置回退到 `index.html`）。
+## 部署
+
+生产部署步骤（数据目录与权限、systemd 环境变量、备份、结构升级与回退）见 `deploy/README.md`，
+配置模板见 `deploy/env.example`，备份脚本见 `deploy/backup_database.py`。
+
+```bash
+# 服务器上（Ubuntu 24.04）
+sudo -u cvplatform git clone <CodeArts 仓库地址> /opt/cvplatform
+sudo -u cvplatform python3.12 -m venv /opt/cvplatform/.venv
+sudo -u cvplatform /opt/cvplatform/.venv/bin/pip install -r /opt/cvplatform/backend/requirements.txt
+npm --prefix /opt/cvplatform/frontend ci && npm --prefix /opt/cvplatform/frontend run build
+sudo systemctl restart cvplatform.service      # 启动时自动执行未应用的迁移
+```
+
+升级前先备份（`deploy/backup_database.py` 走 SQLite 在线备份接口，WAL 下也一致），
+升级后按 `deploy/README.md` 的冒烟检查逐条确认。
+
+## 待补充信息（如实列出，未虚构）
+
+以下内容属于作业提交信息，仓库内没有可依据的事实来源，因此**留空待填**：
+
+- 学号、姓名、班级等个人信息；
+- 课程作业 / 博客的提交链接，以及作业要求的其它外链；
+- 生产域名（当前用公网 IP 联调；HTTPS 待域名确定后配置）。
+
+## AI 使用说明
+
+本项目在 AI 编程助手（ZCode）辅助下按阶段实现，每个阶段都有明确的人工复核环节：
+
+- **人的决策**：技术选型与取舍（SQLite、单 worker、不引入向量化依赖）、统计口径（分析集合与分母、
+  缺失与零的区分、未归类不参与排序）、主题归并方案、抽样范围与验收标准，以及每阶段的接受或退回
+  ——阶段 3、6 曾被退回并要求修正具体问题后才继续。
+- **AI 的实现**：按阶段提示词编写后端与前端代码、测试与文档草稿，并在每阶段执行测试、类型检查、
+  构建与浏览器验证；对设计文档中不适合本项目的建议（如短语互信息阈值）给出实测数据并说明未采用的理由。
+- **可核对的记录**：进展、决策与遗留问题记在 `开发设计与验收.md`（本地工作文档，按约定不入库），
+  数据侧事实记在 [数据覆盖与来源.md](数据覆盖与来源.md)，提交说明见 CodeArts 提交历史。
+- 代码规范见 `codestyle.md`；所有 AI 生成的代码均由人工复核后提交。
+
+## 已知限制
+
+- 样本为抽样（每会议年份 200 篇），占比只表示样本内的相对热度，不等于整届大会的录用比例；
+- 每个会议只有两个年份，趋势曲线的相邻年份线段较少，中间年份按缺失断开（不是「热度为 0」）；
+- 论文列表与新增表单的年份选项仍取自集中管理的演示常量（2022—2025），与当前样本跨度一致，
+  覆盖范围变化时需改为按接口返回的年份轴提供；
+- 未归类关键词数量较大（长尾），只在界面说明中给出数量，未单独出图；
+- 生产环境的权限、域名与 HTTPS 配置待部署阶段完成。
