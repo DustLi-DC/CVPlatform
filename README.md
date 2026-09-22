@@ -140,17 +140,23 @@ npm --prefix frontend run build          # 含 TypeScript 检查，产物在 fro
 
 ## 数据来源
 
-| 来源 | 覆盖 | 字段 | 官方入口 |
+| 来源 | 覆盖 | 字段 | 入口 |
 |---|---|---|---|
-| CVF Open Access | CVPR、ICCV | 题目、作者、摘要、原文 PDF/落地页 | <https://openaccess.thecvf.com/> |
-| ECVA | ECCV | 同上（ECVA 按年份汇总论文页） | <https://www.ecva.net/papers.php> |
+| HuggingFace 会议论文集镜像 | 2020 年及以后的 CVPR / ICCV / ECCV | 题目、作者、摘要、原文链接、PDF | <https://huggingface.co/collections/ai-conferences/cvpr>（ICCV、ECCV 同格式） |
+| CVF Open Access | CVPR、ICCV（单篇采集与抽样兜底） | 题目、作者、摘要、原文 PDF/落地页 | <https://openaccess.thecvf.com/> |
+| ECVA | ECCV（单篇采集与抽样兜底） | 同上 | <https://www.ecva.net/papers.php> |
 | OpenAlex | 在线兜底检索 | 题目、年份、DOI、摘要倒排索引、类型 | <https://openalex.org/> |
 
 - **实测不可用**：DBLP 返回反爬页面（Anubis），带浏览器标识也被拦截，因此未接入；
   Semantic Scholar 公开接口在测试中触发限流，只作为可选说明保留。
 - 采集规则：按会议年份索引页做确定性的等距抽样（步长 = 索引总数 ÷ 目标条数），
   每篇记录来源标识与获取时间，可逐条核对；外部请求带超时、限流与有限重试。
-- 当前覆盖：6 个会议年份 × 200 篇 = 1200 篇（CVPR 2024/2025、ICCV 2023/2025、ECCV 2022/2024）。
+- **当前覆盖：13 个会议年份、29,072 篇**（2020 年及以后的 CVPR / ICCV / ECCV 完整论文集）：
+  CVPR 2020—2026、ICCV 2021/2023/2025、ECCV 2020/2022/2024。数据集来自
+  [ai-conferences](https://huggingface.co/ai-conferences) 的公开镜像，逐届一个数据集，
+  每篇保留官方原文链接，导入时记录数据集修订号；`ECCV 2026` 因摘要覆盖率仅 71%（数据仍在补齐）
+  被自动跳过。
+- 2020 年以前以及数据集未覆盖的年份仍可用抽样采集（`harvest_cli --run`，每会议年份 200 篇）；
   逐组合的来源、样本量、摘要与关键词情况、去重与缺口见 [数据覆盖与来源.md](数据覆盖与来源.md)。
 
 ## 统计口径
@@ -159,6 +165,9 @@ npm --prefix frontend run build          # 含 TypeScript 检查，产物在 fro
 
 - **分母** = 分析集合的论文数：会议年份有效、标题可用、关键词已按当前规则版本处理完成；
   **关键词处理成功但结果为空仍计入**；
+- **数据性质逐单元说明**：完整论文集覆盖的会议年份（2020 年及以后）占比就是该届录用论文中的比例；
+  抽样年份（每组合最多 200 篇）只表示样本内相对热度。接口用 `coverage.coverage_kinds` 与
+  `coverage.full_coverage_years` 区分，界面据此分述，不用一句「抽样」概括全部数据；
 - **只统计系统提取的关键词**；作者关键词只做展示，不参与榜单、图谱与趋势；
 - **去重**：同一篇论文对同一主题只计一次；跨会议年份汇总时先合并计数与分母，再相除；
 - **缺失与零分开**：没有记录时返回 `null`（图表断线并标注无数据区间），有样本但计数为 0 时返回
@@ -190,6 +199,8 @@ $env:PYTHONPATH = "backend"
 # 真实数据采集：--plan 只打印抽样计划；--run 创建任务并处理；中断后重跑即可续做
 .\.venv\Scripts\python.exe -m app.harvest_cli --plan
 .\.venv\Scripts\python.exe -m app.harvest_cli --run
+# 导入 2020 年及以后的完整论文集（纳入前校验摘要覆盖率，自动跳过不完整年份）
+.\.venv\Scripts\python.exe -m app.harvest_cli --datasets
 # 关键词与统计维护
 .\.venv\Scripts\python.exe -m app.maintenance_cli status
 .\.venv\Scripts\python.exe -m app.maintenance_cli process-keywords --force
