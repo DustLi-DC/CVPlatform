@@ -33,8 +33,10 @@ def test_single_document_title_only_produces_keywords():
     assert result.corpus_size == 1
     assert result.effective_min_df == 1
     names = [keyword.name for keyword in result.keywords]
-    assert "learning" in names
+    # kw-v3 起 learning / representation 这类通用裸词不再单独成词（见 BARE_GENERIC），
+    # 方向含义由 self-supervised 这类具体词承载
     assert "self-supervised" in names
+    assert "learning" not in names
 
 
 def test_single_document_with_abstract_produces_keywords():

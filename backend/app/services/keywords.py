@@ -18,6 +18,7 @@ from sqlmodel import Session, select
 
 from ..config import KEYWORD_RULESET_VERSION
 from ..models.entities import AppMeta, Keyword, Paper, PaperKeyword
+from .maintenance import mark_analysis_changed
 
 # 常见缩写与写法归一。只做确定性的等价替换，不做语义合并。
 _CANONICAL_REPLACEMENTS: tuple[tuple[str, str], ...] = (
@@ -32,8 +33,13 @@ _CANONICAL_REPLACEMENTS: tuple[tuple[str, str], ...] = (
 
 _NON_WORD = re.compile(r"[^\w\s\-+]", re.UNICODE)
 _SPACES = re.compile(r"\s+")
-# 以这些结尾的词不是复数；去掉尾部 s 会把词改坏（across→acros、analysis→analysi）
-_NOT_PLURAL = re.compile(r"(ss|us|is|os|as)$")
+# 以这些结尾的词不是复数；去掉尾部 s 会把词改坏（across→acros、analysis→analysi）。
+# 不包含 -os：videos 要归到 video，而 -os 只保护 chaos 这类罕见词，
+# 两相权衡下按「合并 video/videos」处理（实测 videos 影响 43 篇论文）。
+_NOT_PLURAL = re.compile(r"(ss|us|is|as)$")
+# 以 -(ss|x|z|ch|sh)es 结尾的名词复数应去掉整个 es：classes→class、boxes→box。
+# 不包含 -ses：cases→case、uses→use 要去的是一个 s，按 es 去会得到 cas / us 这种错词。
+_ES_PLURAL = re.compile(r"(sses|xes|zes|ches|shes)$")
 
 
 def _singularize(token: str) -> str:
@@ -44,6 +50,8 @@ def _singularize(token: str) -> str:
     """
     if len(token) < 4 or not token.endswith("s"):
         return token
+    if _ES_PLURAL.search(token):
+        return token[:-2]
     if _NOT_PLURAL.search(token):
         return token
     if token.endswith("ies"):
@@ -191,6 +199,7 @@ def _replace_origin_keywords(
             row.rank = desired[keyword_id]
             session.add(row)
 
+    mark_analysis_changed(session)
     for keyword_id in desired:
         if keyword_id in existing_by_keyword:
             continue
@@ -249,4 +258,6 @@ def clear_system_keywords(session: Session, paper_id: int) -> int:
     for row in rows:
         session.delete(row)
         removed += 1
+    if removed:
+        mark_analysis_changed(session)
     return removed

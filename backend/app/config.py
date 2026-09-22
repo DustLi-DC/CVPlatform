@@ -30,8 +30,14 @@ KEYWORD_STATUSES: tuple[str, ...] = ("pending", "running", "done", "failed")
 
 # 关键词规则版本：规则、停用词或阈值变化时必须同步提升。
 # kw-v2：修正单复数归一（不再把 across / analysis 这类词去掉尾部 s）
-KEYWORD_RULESET_VERSION = "kw-v2"
-TOPIC_RULESET_VERSION = "topic-v0"
+# kw-v3（阶段 7 依据 1200 篇真实样本校准）：
+#   - 剔除链接与代码/出版样板词（原先 http github 是最高频短语）
+#   - 补入学术行文与评价套话（demonstrate / existing 等实测占 30%~44%）
+#   - 短语最小文档频次 20 → 5（原阈值下全语料只有 102 个短语可用）
+#   - 支持 3d / 2d 这类数字开头的写法；同篇内被短语覆盖的通用裸词不再单列
+KEYWORD_RULESET_VERSION = "kw-v3"
+# 主题表版本：与 backend/app/data/topics_v1.json 内的「版本」字段保持一致
+TOPIC_RULESET_VERSION = "topic-v2"
 
 # 目标覆盖范围：阶段 1 确定的抽样组合（三大会议各两个实际举办年份）。
 # 批量导入的标题匹配与真实数据采集都以这一处为准，避免两处范围不一致。
@@ -59,6 +65,17 @@ DEFAULT_PAGE_SIZE = 8
 # 批量导入限制：行数与文件大小上限（阶段 1 与原型均按 500 行、2 MB 约定）
 IMPORT_MAX_ROWS = int(os.environ.get("IMPORT_MAX_ROWS") or 500)
 IMPORT_MAX_BYTES = int(os.environ.get("IMPORT_MAX_BYTES") or 2 * 1024 * 1024)
+
+# 统计口径参数（阶段 7）
+# 默认分组为「主题」（方案 A 已确认采用）。若将来改用方案 B（直接按关键词统计），
+# 必须显式把这里改成 "keyword"：仅清空 topic 表是不够的，那样所有关键词都会落进「未归类」。
+STATS_DEFAULT_GROUP_BY = os.environ.get("STATS_DEFAULT_GROUP_BY", "topic").strip().lower()
+STATS_TOP_LIMIT = 10
+STATS_TOP_LIMIT_MAX = 50
+STATS_GRAPH_LIMIT = 40
+STATS_GRAPH_MIN_EDGE = 2
+# 进程内统计缓存条数上限（后端单 worker，超限时整体清空）
+STATS_CACHE_MAX_ENTRIES = 64
 
 
 def repository_root() -> Path:
