@@ -214,6 +214,9 @@ export interface StatsCoverageDetail {
   data_updated_at: string | null
   keyword_ruleset_version: string
   topic_ruleset_version: string
+  /** 主题表规模（由接口给出，界面不写死） */
+  topic_total: number
+  topic_alias_total: number
   has_data: boolean
 }
 

@@ -421,10 +421,11 @@ const dataSources = [
       </ol>
       <p class="section-text">
         <strong>统计只使用系统提取的关键词</strong>，并经主题归并（主题表
-        {{ coverage?.topic_ruleset_version ?? 'topic-v2' }}，35 个主题、442 个别名，
-        见仓库内 backend/app/data/topics_v1.json）。论文自带的作者关键词只作展示，
+        {{ coverage?.topic_ruleset_version ?? 'topic-v3' }}：{{ coverage?.topic_total ?? '—' }} 个主题、
+        {{ coverage?.topic_alias_total ?? '—' }} 条别名，见仓库内 backend/app/data/topics_v1.json）。
+        论文自带的作者关键词只作展示，
         不参与 Top 10、图谱与趋势，避免两种来源混在一起改变口径。
-        当前关键词规则版本为 <strong>{{ coverage?.keyword_ruleset_version ?? 'kw-v3' }}</strong>，
+        当前关键词规则版本为 <strong>{{ coverage?.keyword_ruleset_version ?? 'kw-v4' }}</strong>，
         停用词、短语阈值等规则变化时会提升版本号并按新版本重算。
       </p>
       <p class="section-text">

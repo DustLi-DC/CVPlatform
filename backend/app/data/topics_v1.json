@@ -1,7 +1,7 @@
 {
-  "版本": "topic-v2",
+  "版本": "topic-v3",
   "说明": "主题归并表：把系统抽取到的同义表达归并到主题，只影响统计展示，不改写原始关键词。未映射到任何主题的关键词如实保留为「未归类」。",
-  "依据样本": "6 个会议年份 × 200 篇 = 1200 篇真实论文的系统关键词（关键词规则 kw-v3），见 数据覆盖与来源.md",
+  "依据样本": "2020—2026 六个年份的完整论文集（13 个会议年份、约 2.9 万篇）的系统关键词（kw-v4）；别名按该语料的高频未归类词补充，覆盖情况见 数据覆盖与来源.md",
   "分组说明": "group_name 在界面上用于主题分组配色，与会议颜色是两套独立概念；缺失时用中性色，不伪造分组。",
   "主题": [
     {
@@ -18,7 +18,15 @@
         "dense detection",
         "detection transformer",
         "instance detection",
-        "small object"
+        "small object",
+        "proposal",
+        "bounding",
+        "bounding box",
+        "anchor",
+        "tracker",
+        "box",
+        "detection head",
+        "long-tailed detection"
       ]
     },
     {
@@ -35,7 +43,19 @@
         "video segmentation",
         "interactive segmentation",
         "masked image",
-        "mask"
+        "mask",
+        "segment",
+        "image segmentation",
+        "object segmentation",
+        "panoptic",
+        "sam",
+        "boundary",
+        "foreground",
+        "edge",
+        "referring",
+        "binary mask",
+        "video object",
+        "instance mask"
       ]
     },
     {
@@ -50,7 +70,13 @@
         "fine-grained recognition",
         "classifier",
         "prototype",
-        "category"
+        "category",
+        "long-tailed",
+        "discriminative",
+        "descriptor",
+        "fine-grained classification",
+        "prototypical",
+        "imagenet"
       ]
     },
     {
@@ -67,7 +93,14 @@
         "body",
         "skeleton",
         "motion capture",
-        "human motion"
+        "human motion",
+        "keypoint",
+        "3d pose",
+        "camera pose",
+        "human-object",
+        "human-object interaction",
+        "pose tracking",
+        "hand-object"
       ]
     },
     {
@@ -86,7 +119,12 @@
         "re-identification",
         "identity",
         "identity-preserving",
-        "portrait"
+        "portrait",
+        "person re-identification",
+        "reid",
+        "face generation",
+        "talking face",
+        "gaze estimation"
       ]
     },
     {
@@ -99,7 +137,9 @@
         "visual tracking",
         "trajectory",
         "data association",
-        "tracking-by-detection"
+        "tracking-by-detection",
+        "tracking by detection",
+        "motion tracking"
       ]
     },
     {
@@ -113,7 +153,12 @@
         "out-of-distribution",
         "ood detection",
         "novelty detection",
-        "industrial inspection"
+        "industrial inspection",
+        "ood",
+        "out-of-distribution detection",
+        "anomaly localization",
+        "defect",
+        "industrial anomaly"
       ]
     },
     {
@@ -134,7 +179,20 @@
         "underwater",
         "compression artifact",
         "denoising",
-        "image denoising"
+        "image denoising",
+        "color",
+        "light",
+        "illumination",
+        "lighting",
+        "spectral",
+        "degradation",
+        "distortion",
+        "restoration",
+        "recovery",
+        "enhancement",
+        "noisy",
+        "low-light enhancement",
+        "raw image"
       ]
     },
     {
@@ -169,7 +227,17 @@
         "radiance",
         "splatting",
         "implicit representation",
-        "4d"
+        "4d",
+        "3d object",
+        "3dg",
+        "neural radiance",
+        "volume rendering",
+        "density",
+        "rgb",
+        "rgb-d",
+        "cameras",
+        "viewpoint",
+        "camera calibration"
       ]
     },
     {
@@ -187,7 +255,9 @@
         "3d scene",
         "indoor scene",
         "outdoor scene",
-        "lidar"
+        "lidar",
+        "3d point cloud",
+        "lidar point cloud"
       ]
     },
     {
@@ -210,7 +280,18 @@
         "calibration",
         "depth map",
         "surface reconstruction",
-        "3d point"
+        "3d point",
+        "deformation",
+        "rotation",
+        "coordinate",
+        "projection",
+        "mapping",
+        "topology",
+        "primitive",
+        "distance",
+        "similarity",
+        "point matching",
+        "non-rigid"
       ]
     },
     {
@@ -228,7 +309,12 @@
         "face reconstruction",
         "head",
         "gaussian avatar",
-        "scene generation"
+        "scene generation",
+        "animation",
+        "virtual",
+        "character",
+        "human generation",
+        "avatar generation"
       ]
     },
     {
@@ -250,7 +336,13 @@
         "event camera",
         "video classification",
         "long-term video",
-        "long video understanding"
+        "long video understanding",
+        "event-based",
+        "activity",
+        "stream",
+        "behavior",
+        "video object tracking",
+        "video question"
       ]
     },
     {
@@ -263,7 +355,8 @@
         "video synthesis",
         "image animation",
         "motion transfer",
-        "talking head"
+        "talking head",
+        "video prediction"
       ]
     },
     {
@@ -278,7 +371,11 @@
         "ego-motion",
         "homography",
         "dynamics",
-        "motion"
+        "motion",
+        "optical",
+        "occlusion",
+        "propagation",
+        "deformation field"
       ]
     },
     {
@@ -293,7 +390,10 @@
         "spatio-temporal",
         "temporal modeling",
         "state estimation",
-        "sequence"
+        "sequence",
+        "future",
+        "spatiotemporal",
+        "sequential"
       ]
     },
     {
@@ -315,7 +415,19 @@
         "sampling",
         "gan",
         "generative adversarial",
-        "variational autoencoder"
+        "variational autoencoder",
+        "diffusion-based",
+        "generator",
+        "synthesis",
+        "inversion",
+        "autoregressive",
+        "controllable",
+        "compositional",
+        "edit",
+        "t2i",
+        "text-to-image generation",
+        "high-fidelity",
+        "high-quality"
       ]
     },
     {
@@ -338,7 +450,12 @@
         "image enhancement",
         "retrieval",
         "image retrieval",
-        "generative editing"
+        "generative editing",
+        "image super-resolution",
+        "high-resolution",
+        "resolution",
+        "retouching",
+        "matting"
       ]
     },
     {
@@ -374,7 +491,19 @@
         "visual instruction",
         "multimodal large language",
         "visual dialogue",
-        "multimodal dialogue"
+        "multimodal dialogue",
+        "image-text",
+        "lvlm",
+        "multimodal language",
+        "question",
+        "answering",
+        "answer",
+        "hallucination",
+        "description",
+        "preference",
+        "concept",
+        "multimodal understanding",
+        "caption generation"
       ]
     },
     {
@@ -398,7 +527,16 @@
         "domain shift",
         "transfer learning",
         "generalization gap",
-        "zero-shot transfer"
+        "zero-shot transfer",
+        "unseen",
+        "generalized",
+        "generalizable",
+        "domain generalization",
+        "test-time",
+        "universal",
+        "cross-view",
+        "open-world",
+        "few-shot adaptation"
       ]
     },
     {
@@ -439,7 +577,12 @@
         "consistency regularization",
         "consistency",
         "contrastive loss",
-        "augmentation strategy"
+        "augmentation strategy",
+        "masked",
+        "ssl",
+        "pretrained",
+        "foundation",
+        "pretext task"
       ]
     },
     {
@@ -456,7 +599,16 @@
         "annotation",
         "active learning",
         "few-shot learning",
-        "label"
+        "label",
+        "unlabeled",
+        "labeled",
+        "weakly",
+        "weakly-supervised",
+        "pseudo",
+        "pseudo-label",
+        "supervision",
+        "semi-supervised learning",
+        "label-efficient"
       ]
     },
     {
@@ -480,7 +632,18 @@
         "scheduler",
         "training data",
         "data augmentation",
-        "augmentation"
+        "augmentation",
+        "regularization",
+        "tuning",
+        "training-free",
+        "gradient",
+        "teacher",
+        "student",
+        "downstream",
+        "objective",
+        "parameter-efficient",
+        "negative sample",
+        "positive pair"
       ]
     },
     {
@@ -501,7 +664,20 @@
         "encoder",
         "decoder",
         "hierarchical",
-        "unified"
+        "unified",
+        "cnn",
+        "dnn",
+        "vit",
+        "self-attention",
+        "activation",
+        "residual",
+        "block",
+        "hybrid",
+        "kernel",
+        "expert",
+        "mixture of experts",
+        "encoder-decoder",
+        "network design"
       ]
     },
     {
@@ -516,7 +692,13 @@
         "knowledge graph",
         "hypergraph",
         "relation",
-        "structured"
+        "structured",
+        "node",
+        "dependency",
+        "relationship",
+        "correlation",
+        "structural",
+        "collaborative graph"
       ]
     },
     {
@@ -534,7 +716,10 @@
         "robotic",
         "simulation",
         "world model",
-        "simulator"
+        "simulator",
+        "reinforcement",
+        "policy learning",
+        "simulation environment"
       ]
     },
     {
@@ -558,7 +743,13 @@
         "anonymization",
         "adversarial example",
         "adversarial robustness",
-        "attack transfer"
+        "attack transfer",
+        "defense",
+        "against",
+        "bias",
+        "fairness",
+        "poisoning",
+        "adversarial defense"
       ]
     },
     {
@@ -580,7 +771,17 @@
         "cost",
         "memory footprint",
         "inference speed",
-        "throughput"
+        "throughput",
+        "fast",
+        "speed",
+        "rate",
+        "computation",
+        "complexity",
+        "scalable",
+        "large-scale",
+        "device",
+        "model compression",
+        "real-time"
       ]
     },
     {
@@ -594,7 +795,12 @@
         "hyperparameter",
         "scaling",
         "autoencoder",
-        "automatic"
+        "automatic",
+        "architecture search",
+        "search space",
+        "nas",
+        "hyperparameter search",
+        "scaling law"
       ]
     },
     {
@@ -612,7 +818,13 @@
         "reproducibility",
         "benchmark suite",
         "evaluation protocol",
-        "zero-shot evaluation"
+        "zero-shot evaluation",
+        "analysis",
+        "study",
+        "assessment",
+        "test",
+        "empirical study",
+        "ablation study"
       ]
     },
     {
@@ -630,7 +842,13 @@
         "trajectory prediction",
         "road",
         "vehicle",
-        "traffic"
+        "traffic",
+        "sensor",
+        "signal",
+        "indoor",
+        "outdoor",
+        "driver",
+        "traffic scene"
       ]
     },
     {
@@ -655,7 +873,13 @@
         "cell",
         "nuclei",
         "surgical",
-        "organ"
+        "organ",
+        "imaging",
+        "diagnosis",
+        "anatomy",
+        "radiology",
+        "ultrasound imaging",
+        "pathology image"
       ]
     },
     {
@@ -671,7 +895,10 @@
         "land cover",
         "earth observation",
         "sar",
-        "multispectral"
+        "multispectral",
+        "aerial image",
+        "satellite image",
+        "sar image"
       ]
     },
     {
@@ -689,7 +916,105 @@
         "table",
         "pdf",
         "signature",
-        "document understanding"
+        "document understanding",
+        "scan",
+        "text detection",
+        "scene text recognition",
+        "table recognition"
+      ]
+    },
+    {
+      "slug": "continual-learning",
+      "name": "持续学习与增量学习",
+      "group_name": "learning",
+      "aliases": [
+        "continual",
+        "continual learning",
+        "forgetting",
+        "catastrophic forgetting",
+        "incremental",
+        "incremental learning",
+        "lifelong",
+        "lifelong learning",
+        "rehearsal",
+        "task-incremental",
+        "class-incremental",
+        "plasticity",
+        "stability-plasticity",
+        "continual adaptation"
+      ]
+    },
+    {
+      "slug": "federated-distributed",
+      "name": "联邦学习与分布式训练",
+      "group_name": "learning",
+      "aliases": [
+        "federated",
+        "federated learning",
+        "client",
+        "clients",
+        "heterogeneous client",
+        "collaborative",
+        "collaborative learning",
+        "distributed training",
+        "communication cost",
+        "secure aggregation",
+        "decentralized",
+        "edge device",
+        "on-device",
+        "personalized federated"
+      ]
+    },
+    {
+      "slug": "audio-speech",
+      "name": "音频与语音",
+      "group_name": "multimodal",
+      "aliases": [
+        "audio",
+        "audio-visual",
+        "speech",
+        "sound",
+        "acoustic",
+        "voice",
+        "speech recognition",
+        "audio generation",
+        "music",
+        "audio-language"
+      ]
+    },
+    {
+      "slug": "uncertainty-reliability",
+      "name": "不确定性与可靠性",
+      "group_name": "robustness",
+      "aliases": [
+        "uncertainty",
+        "probabilistic",
+        "confidence",
+        "calibrated",
+        "reliability",
+        "bayesian",
+        "ambiguity",
+        "risk",
+        "uncertainty estimation",
+        "trustworthy"
+      ]
+    },
+    {
+      "slug": "explainability",
+      "name": "可解释性与因果分析",
+      "group_name": "robustness",
+      "aliases": [
+        "explanation",
+        "explainability",
+        "interpretability",
+        "interpretable",
+        "causal",
+        "causality",
+        "attribution",
+        "saliency",
+        "counterfactual",
+        "faithful",
+        "visual explanation"
       ]
     }
   ]

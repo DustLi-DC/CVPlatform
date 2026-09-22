@@ -40,7 +40,7 @@ KEYWORD_STATUSES: tuple[str, ...] = ("pending", "running", "done", "failed")
 #   候选词表会爆炸到 1.4 万词 / 6.5 万短语，长尾噪声占绝大多数）
 KEYWORD_RULESET_VERSION = "kw-v4"
 # 主题表版本：与 backend/app/data/topics_v1.json 内的「版本」字段保持一致
-TOPIC_RULESET_VERSION = "topic-v2"
+TOPIC_RULESET_VERSION = "topic-v3"
 
 # 目标覆盖范围：阶段 1 确定的抽样组合（三大会议各两个实际举办年份）。
 # 批量导入的标题匹配与真实数据采集都以这一处为准，避免两处范围不一致。

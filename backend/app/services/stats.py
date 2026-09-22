@@ -944,6 +944,14 @@ def coverage_detail(session: Session) -> dict[str, object]:
         {"source": str(source), "papers": int(count)} for source, count in source_rows
     ]
 
+    topic_row = session.execute(
+        text(
+            "SELECT COUNT(*), (SELECT COUNT(*) FROM topic_alias) FROM topic WHERE is_active = 1"
+        )
+    ).first()
+    topic_total = int(topic_row[0]) if topic_row else 0
+    topic_alias_total = int(topic_row[1]) if topic_row else 0
+
     total_records = sum(item["records"] for item in covered)  # type: ignore[arg-type]
     total_analysis = sum(item["analysis_papers"] for item in covered)  # type: ignore[arg-type]
     coverage = _coverage(session)
@@ -992,6 +1000,9 @@ def coverage_detail(session: Session) -> dict[str, object]:
         "data_updated_at": _now_updated_at(session),
         "keyword_ruleset_version": _current_ruleset(session),
         "topic_ruleset_version": _topic_ruleset(session),
+        # 主题表规模由接口给出，避免界面把数字写死（主题表更新后会漂移）
+        "topic_total": topic_total,
+        "topic_alias_total": topic_alias_total,
         "has_data": total_analysis > 0,
     }
 
