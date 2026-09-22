@@ -446,3 +446,33 @@ def test_trend_distinguishes_not_held_years_from_data_gaps(caliber):
     assert points[("ECCV", 2022)]["has_data"] is True
     # CVPR 每年举办，夹具里 2023 没有记录 → 真缺口
     assert points[("CVPR", 2023)]["reason"] == "no_records_in_sample"
+
+
+def test_skipped_dataset_year_is_out_of_scope_not_a_gap(caliber, temp_db: Path):
+    """按完整度策略跳过的会议年份记为 out_of_scope：不是数据缺口，也不该被标成缺数据。"""
+    import json as _json
+
+    # 夹具里 ECCV 2024 举办（偶数年）但没有记录，正好用来验证「按策略跳过」
+    set_meta(
+        temp_db,
+        "dataset_skipped:ai-conferences/ECCV2024",
+        _json.dumps(
+            {
+                "conference": "ECCV",
+                "year": 2024,
+                "rows": 2864,
+                "abstract_ratio": 0.64,
+                "checked_at": "2026-01-01T00:00:00Z",
+            }
+        ),
+    )
+    with session_scope() as session:
+        result = stats.trend(session, stats.parse_scope(), keys=["object-detection"])
+    points = {
+        (point["conference"], point["year"]): point for point in result["series"][0]["points"]
+    }
+    # ECCV 2024 举办但没有数据，且已登记为「按策略跳过」→ out_of_scope（不是缺口）
+    assert points[("ECCV", 2024)]["reason"] == "out_of_scope"
+    assert points[("ECCV", 2024)]["has_data"] is False
+    # 对照：CVPR 2023 没登记跳过、且 CVPR 每年举办 → 真缺口
+    assert points[("CVPR", 2023)]["reason"] == "no_records_in_sample"

@@ -100,6 +100,20 @@ const unit = computed(() => (valueMode.value === 'share' ? '占比（%）' : '�
 const LINE_LABELS = ['实线', '虚线', '点线']
 
 /** 图例：会议色 + 主题线型（比较多个主题时）+ 无数据区间 */
+/** 只在数据里真的出现该画法时才列图例项，避免出现永远不出现的图例 */
+const hasAbsentYears = computed(() =>
+  trend.value?.series.some((series) =>
+    series.points.some((point) => point.reason === 'not_a_conference_year'),
+  ) ?? false,
+)
+const hasMissingYears = computed(() =>
+  trend.value?.series.some((series) =>
+    series.points.some(
+      (point) => point.reason === 'no_records_in_sample' || point.reason === 'no_analysis_paper',
+    ),
+  ) ?? false,
+)
+
 const trendLegend = computed(() => [
   ...conferences.value.map((conference) => ({
     label: conference,
@@ -113,8 +127,12 @@ const trendLegend = computed(() => [
         shape: 'line' as const,
       }))
     : []),
-  { label: '无数据区间（该届有会议但未采到）', color: 'var(--color-inactive)', shape: 'block' as const },
-  { label: '该届不举办', color: 'var(--color-border-strong)', shape: 'block' as const },
+  ...(hasMissingYears.value
+    ? [{ label: '无数据区间（该届有会议但未采到）', color: 'var(--color-inactive)', shape: 'block' as const }]
+    : []),
+  ...(hasAbsentYears.value
+    ? [{ label: '该届不举办', color: 'var(--color-border-strong)', shape: 'block' as const }]
+    : []),
 ])
 
 const trendLines = computed<TrendLine[]>(() => {
@@ -144,6 +162,8 @@ const trendLines = computed<TrendLine[]>(() => {
               : point.count,
         ),
         // 真缺口（该届有会议但没采到数据）→ 断开并标灰；该届不举办 → 跨过该年份连线
+        // 真缺口（范围内该届没采到数据）才标灰并断开；
+        // out_of_scope（按完整度策略跳过，如 ECCV 2026）与 not_a_conference_year 都不算缺口
         missingYears: points.flatMap((point, index) =>
           point !== null &&
           (point.reason === 'no_records_in_sample' || point.reason === 'no_analysis_paper')
@@ -761,6 +781,7 @@ watch(() => route.query.kw, applyRouteQuery)
                     >
                       无记录
                     </span>
+                    <span v-else-if="cell.point.reason === 'out_of_scope'" class="sample-none">—</span>
                     <span v-else class="sample-value">
                       {{ cell.point.count }} / {{ cell.point.denominator }} 篇 ·
                       <strong>{{ formatShare(cell.point.share) }}</strong>

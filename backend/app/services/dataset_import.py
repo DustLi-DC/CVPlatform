@@ -140,3 +140,49 @@ def imported_datasets(session: Session) -> dict[str, dict[str, object]]:
             continue
         out[key[len(DATASET_META_PREFIX) :]] = payload if isinstance(payload, dict) else {}
     return out
+
+
+SKIPPED_META_PREFIX = "dataset_skipped:"
+
+
+def mark_dataset_skipped(session: Session, ref: hf.DatasetRef) -> None:
+    """记录「因完整度不足而按策略跳过」的会议年份。
+
+    这不是数据缺口（该届确实存在，只是数据仍在补齐），统计接口据此把它排除在
+    「缺数据」标注之外；等它补齐后重新导入，记录会被覆盖为正式导入。
+    """
+    _set_meta(
+        session,
+        f"{SKIPPED_META_PREFIX}{ref.dataset}",
+        json.dumps(
+            {
+                "conference": ref.conference,
+                "year": ref.year,
+                "rows": ref.rows,
+                "abstract_ratio": ref.abstract_ratio,
+                "checked_at": hf._now(),
+            },
+            ensure_ascii=False,
+        ),
+    )
+    session.commit()
+
+
+def skipped_datasets(session: Session) -> dict[tuple[str, int], dict[str, object]]:
+    """已跳过的会议年份：{(会议, 年份): 元信息}。"""
+    rows = session.exec(
+        AppMeta.__table__.select().where(AppMeta.key.like(f"{SKIPPED_META_PREFIX}%"))
+    ).all()
+    out: dict[tuple[str, int], dict[str, object]] = {}
+    for row in rows:
+        try:
+            payload = json.loads(str(row[1]))
+        except json.JSONDecodeError:
+            continue
+        if not isinstance(payload, dict):
+            continue
+        conference = str(payload.get("conference") or "")
+        year = payload.get("year")
+        if conference and isinstance(year, int):
+            out[(conference, year)] = payload
+    return out

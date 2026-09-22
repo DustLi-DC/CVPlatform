@@ -22,6 +22,7 @@ import time
 
 from sqlalchemy import text
 
+from .config import DATASET_MIN_YEAR
 from .db.engine import init_database, session_scope
 from .services import keyword_job, maintenance, topic_layer
 
@@ -96,6 +97,29 @@ def _reload_topics() -> int:
         f"（新增 {result['created']}、更新 {result['updated']}、停用 {result['deactivated']}）、"
         f"别名写入 {result['aliases']}、已映射关键词 {result['mapped_keywords']}"
     )
+    return 0
+
+
+def _check_datasets(min_year: int) -> int:
+    """校验完整论文集数据集的可用性与完整度，并登记被跳过的会议年份。
+
+    不写论文数据，只做「探测 + 摘要完整度校验 + 登记」；补齐后重跑即可纳入。
+    """
+    from .services import dataset_import
+    from .services.sources import huggingface as hf
+
+    notes: list[str] = []
+    skipped: list = []
+    refs = hf.discover(min_year=min_year, on_note=notes.append, skipped_out=skipped)
+    with session_scope() as session:
+        for ref in skipped:
+            dataset_import.mark_dataset_skipped(session, ref)
+    print(f"可用数据集 {len(refs)} 个：" + "、".join(f"{r.conference}{r.year}" for r in refs))
+    for note in notes:
+        print(f"  !! {note}")
+    if skipped:
+        print(f"已登记 {len(skipped)} 个跳过年份（统计接口不再把它们标成缺数据）："
+              + "、".join(f"{r.conference}{r.year}" for r in skipped))
     return 0
 
 
@@ -320,6 +344,9 @@ def main(argv: list[str] | None = None) -> int:
     process.add_argument("--limit", type=int, default=None, help="本次最多处理多少篇")
     process.add_argument("--force", action="store_true", help="忽略状态与版本，对语料全量重算")
     sub.add_parser("reload-topics", help="重新载入主题表并重算关键词的主题映射")
+    check = sub.add_parser("check-datasets", help="校验完整论文集数据集并登记跳过的年份")
+    check.add_argument("--min-year", type=int, default=DATASET_MIN_YEAR,
+                       help=f"起始年份（默认 {DATASET_MIN_YEAR}）")
     dataset = sub.add_parser("import-dataset", help="导入课程数据集或可分发样例（JSON）")
     dataset.add_argument("path", help="数据集文件路径，如 deploy/sample/cvplatform_sample.json")
     verify = sub.add_parser("verify-stats", help="用独立 SQL 复算统计结果并测量耗时内存")
@@ -342,6 +369,8 @@ def main(argv: list[str] | None = None) -> int:
         return _process_keywords(args.limit, args.force)
     if args.command == "reload-topics":
         return _reload_topics()
+    if args.command == "check-datasets":
+        return _check_datasets(args.min_year)
     if args.command == "import-dataset":
         return _import_dataset(args.path)
     if args.command == "verify-stats":

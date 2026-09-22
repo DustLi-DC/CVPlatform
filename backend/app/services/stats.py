@@ -749,6 +749,9 @@ def trend(
     years = _year_axis(session, scope)
     records = _records_per_cell(session, scope)
     group_names = _topic_group_names(session)
+    from .dataset_import import skipped_datasets
+
+    skipped_cells = skipped_datasets(session)
 
     params: dict[str, object] = {}
     clause = _scope_clause(scope, alias="ap", params=params)
@@ -790,14 +793,16 @@ def trend(
                 cell_base = cell_denominator.get(cell, 0)
                 has_records = records.get(cell, 0) > 0
                 if not has_records:
-                    # 区分「该届不举办」（ICCV 偶数年、ECCV 奇数年）与「该届没有采到数据」：
-                    # 前者的曲线可以跨过该年份连线并标注「该届不举办」，
-                    # 后者必须断开并标注为数据缺口，不能画成 0 也不能连线掩盖。
-                    reason = (
-                        "not_a_conference_year"
-                        if not holds_conference(conference, year)
-                        else "no_records_in_sample"
-                    )
+                    # 三种「没有数据」必须分开（画法不同，也不能画成 0）：
+                    # 1) 该届不举办（ICCV 偶数年、ECCV 奇数年）：不是缺口；
+                    # 2) 该届存在但按完整度策略跳过（如 ECCV 2026 摘要仅 71%）：属本次范围之外；
+                    # 3) 该届在范围内但没有采到数据：真正的缺口。
+                    if not holds_conference(conference, year):
+                        reason = "not_a_conference_year"
+                    elif (conference, year) in skipped_cells:
+                        reason = "out_of_scope"
+                    else:
+                        reason = "no_records_in_sample"
                     points.append(
                         {
                             "conference": conference,

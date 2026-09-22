@@ -54,8 +54,9 @@ def _import_datasets(limit: int | None, min_year: int) -> int:
     纳入前逐个校验摘要完整度；未达标的年份跳过并说明原因（例如会议数据仍在补齐）。
     """
     notes: list[str] = []
+    skipped: list = []
     print(f"发现数据集（{min_year} 年及以后，纳入前校验摘要完整度）…")
-    refs = hf.discover(min_year=min_year, on_note=notes.append)
+    refs = hf.discover(min_year=min_year, on_note=notes.append, skipped_out=skipped)
     for note in notes:
         print(f"  !! {note}")
     if not refs:
@@ -74,6 +75,15 @@ def _import_datasets(limit: int | None, min_year: int) -> int:
         )
     else:
         print("目标组合均被数据集覆盖，抽样采集结果会被同一去重键合并（不产生副本）。")
+
+    # 记录「按完整度策略跳过」的会议年份：它们不是数据缺口，而是本次范围之外，
+    # 统计接口据此不再把它们标成缺数据（补齐后重新导入即可自动纳入）
+    if skipped:
+        from .services.dataset_import import mark_dataset_skipped
+
+        with session_scope() as session:
+            for ref in skipped:
+                mark_dataset_skipped(session, ref)
 
     total_created = total_updated = total_skipped = 0
     for ref in refs:

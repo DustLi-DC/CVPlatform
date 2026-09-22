@@ -250,6 +250,7 @@ def discover(
     min_abstract_ratio: float = DATASET_MIN_ABSTRACT_RATIO,
     timeout: float | None = None,
     on_note=None,
+    skipped_out: list[DatasetRef] | None = None,
 ) -> list[DatasetRef]:
     """发现可用数据集；verify=True 时逐个校验摘要完整度，不达标的跳过。
 
@@ -281,6 +282,16 @@ def discover(
                         on_note(
                             f"{ref.label} 跳过：摘要覆盖率 {ratio:.0%} < {min_abstract_ratio:.0%}"
                             "（会议数据仍在补齐）"
+                        )
+                    if skipped_out is not None:
+                        skipped_out.append(
+                            DatasetRef(
+                                dataset=ref.dataset,
+                                conference=ref.conference,
+                                year=ref.year,
+                                rows=ref.rows,
+                                abstract_ratio=ratio,
+                            )
                         )
                     continue
                 ref = DatasetRef(
