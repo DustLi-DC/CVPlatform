@@ -11,25 +11,18 @@
  * 生命周期：容器尺寸变化用 ResizeObserver 跟随，组件卸载时移除监听并 dispose 实例，
  * 避免切换页面后残留实例继续占用内存与动画帧。
  *
- * 依赖按需注册：只引入 graph 图表、提示框与 canvas 渲染器，不整包引入 ECharts。
- * 整包会让产物从十几 kB 涨到 400 kB 以上，对 2 Mbps 的部署环境是明显浪费；
- * 阶段 9 的趋势图在这里追加注册折线图与相应组件即可。
+ * 依赖按需注册集中在 composables/echarts.ts（图谱与趋势图共用），这里只取用实例，
+ * 避免各组件各自注册造成「换了组件忘记加注册」的漂移。
  */
-import { GraphChart } from 'echarts/charts'
-import type { ComposeOption } from 'echarts/core'
-import { TooltipComponent } from 'echarts/components'
-import * as echarts from 'echarts/core'
-import { LabelLayout } from 'echarts/features'
-import { CanvasRenderer } from 'echarts/renderers'
 import { onBeforeUnmount, onMounted, ref, shallowRef, watch } from 'vue'
 
 import type { GraphSeriesOption } from 'echarts/charts'
 import type { TooltipComponentOption } from 'echarts/components'
+import type { ComposeOption } from 'echarts/core'
 
+import { echarts, resolveCssColor } from '../composables/echarts'
 import type { GraphEdge, GraphNode } from '../types/stats'
 import { groupColor } from '../types/stats'
-
-echarts.use([GraphChart, TooltipComponent, LabelLayout, CanvasRenderer])
 
 const props = withDefaults(
   defineProps<{
@@ -60,18 +53,9 @@ function edgeWidth(weight: number): number {
   return 1 + weight / 40
 }
 
-function readColor(variable: string): string {
-  // 分组色以 CSS 变量存放（与全站主题一致），画到 canvas 前解析成具体颜色值
-  const value = getComputedStyle(document.documentElement).getPropertyValue(variable).trim()
-  return value || '#94a3b8'
-}
-
 function colorFor(group: string | null): string {
-  const variable = groupColor(group)
-  if (variable.startsWith('var(')) {
-    return readColor(variable.slice(4, -1))
-  }
-  return variable
+  // 分组色以 CSS 变量存放（与全站主题一致），画到 canvas 前必须解析成具体颜色值
+  return resolveCssColor(groupColor(group))
 }
 
 /** 只组合本组件实际用到的图表与组件类型 */
