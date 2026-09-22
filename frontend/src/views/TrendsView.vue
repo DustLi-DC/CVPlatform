@@ -97,10 +97,21 @@ const trendLegend = computed(() => [
   { label: '无数据区间', color: 'var(--color-inactive)', shape: 'block' as const },
 ])
 
+/** 标题区说明较长，放在脚本里拼接，避免模板属性出现超长行 */
+const pageDescription =
+  '选择研究方向与会议，逐年比较它在 CVPR、ICCV、ECCV 中的占比变化。'
+  + '曲线上的断点表示该会议当年没有可用数据，'
+  + '与「有数据但该主题出现 0 次」在图中是两种不同的画法。'
+
+/** 所选会议在当前年份没有可用数据时的说明（对应原型趋势页的灰色区间提示） */
 const coverageHint = computed(() => {
   const missing = sampleList.value.filter((item) => item.sample === null)
   if (!missing.length) return ''
-  return `${missing.map((item) => item.conference).join('、')} 在 ${currentYear.value} 年没有可用数据，趋势图中显示为灰色区间并断开曲线，不按 0 热度处理。`
+  const names = missing.map((item) => item.conference).join('、')
+  return (
+    `${names} 在 ${currentYear.value} 年没有可用数据，`
+    + '趋势图中显示为灰色区间并断开曲线，不按 0 热度处理。'
+  )
 })
 
 /** 表格中的一个零值点：有样本但该主题当年未被检索到，落在 0 轴 */
@@ -181,7 +192,7 @@ watch(
     <PageHeader
       eyebrow="页面 2 / 热度走势对比"
       title="这个方向是在升温，还是已经降温？"
-      description="选择研究方向与会议，逐年比较它在 CVPR、ICCV、ECCV 中的占比变化。曲线上的断点表示该会议当年没有可用数据，与「有数据但该主题出现 0 次」在图中是两种不同的画法。"
+      :description="pageDescription"
     >
       <template #aside>
         <ul class="header-legend">
@@ -223,7 +234,12 @@ watch(
 
         <ConferenceChips v-model="conferences" label="会议（可多选）" />
 
-        <YearRangeSelect v-model:year-from="yearFrom" v-model:year-to="yearTo" :years="demoYears" label="起止年份" />
+        <YearRangeSelect
+          v-model:year-from="yearFrom"
+          v-model:year-to="yearTo"
+          :years="demoYears"
+          label="起止年份"
+        />
 
         <div class="play-controls">
           <button type="button" class="btn btn-primary" @click="togglePlay">

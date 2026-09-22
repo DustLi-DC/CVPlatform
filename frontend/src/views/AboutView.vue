@@ -37,25 +37,36 @@ const conferenceMeta: {
   {
     name: 'CVPR',
     cadence: '每年举办',
+    // 长句拆成多段拼接：不改变渲染结果，同时避免超长行
     intro:
-      'IEEE/CVF Conference on Computer Vision and Pattern Recognition，计算机视觉领域规模最大的年度会议之一，投稿与录用数量长期居前，方向覆盖检测、分割、生成、多模态等。',
+      'IEEE/CVF Conference on Computer Vision and Pattern Recognition，'
+      + '计算机视觉领域规模最大的年度会议之一，投稿与录用数量长期居前，'
+      + '方向覆盖检测、分割、生成、多模态等。',
     years: '2022 / 2023 / 2024 / 2025',
   },
   {
     name: 'ICCV',
     cadence: '奇数年举办',
     intro:
-      'IEEE/CVF International Conference on Computer Vision，两年一次的旗舰会议之一，通常在奇数年举办，论文平均篇幅较长，方法类与理论类工作比例相对更高。',
+      'IEEE/CVF International Conference on Computer Vision，'
+      + '两年一次的旗舰会议之一，通常在奇数年举办，'
+      + '论文平均篇幅较长，方法类与理论类工作比例相对更高。',
     years: '仅奇数年有数据',
   },
   {
     name: 'ECCV',
     cadence: '偶数年举办',
     intro:
-      'European Conference on Computer Vision，两年一次的欧洲旗舰会议，通常在偶数年举办，在三维视觉、几何与重建类方向上的论文占比在演示数据中较为突出。',
+      'European Conference on Computer Vision，两年一次的欧洲旗舰会议，'
+      + '通常在偶数年举办，在三维视觉、几何与重建类方向上的论文占比在演示数据中较为突出。',
     years: '仅偶数年有数据',
   },
 ]
+
+/** 标题区说明较长，放在脚本里拼接，避免模板属性出现超长行 */
+const pageDescription =
+  '这一页解释平台为什么这样统计。如果榜单和曲线里的数字让你有点不确定，先看这里：'
+  + '数据从哪来、关键词怎么抽出来、热度怎么算，以及为什么这里的结果只能当作一个观察样本。'
 
 const keywordSteps = [
   {
@@ -76,7 +87,9 @@ const keywordSteps = [
   {
     step: '4',
     title: '归并与人工校对',
-    desc: '同义表达（如 object detection / object detector）会归并到同一个主题；论文自带的关键词作为「来源提供的关键词」单独保留，不与系统提取结果混在一起。',
+    desc:
+      '同义表达（如 object detection / object detector）会归并到同一个主题；'
+      + '论文自带的关键词作为「来源提供的关键词」单独保留，不与系统提取结果混在一起。',
   },
 ]
 
@@ -104,7 +117,7 @@ const dataSources = [
     <PageHeader
       eyebrow="页面 6 / 关于平台"
       title="关于 CVPlatform"
-      description="这一页解释平台为什么这样统计。如果榜单和曲线里的数字让你有点不确定，先看这里：数据从哪来、关键词怎么抽出来、热度怎么算，以及为什么这里的结果只能当作一个观察样本。"
+      :description="pageDescription"
     />
 
     <section class="card about-section">

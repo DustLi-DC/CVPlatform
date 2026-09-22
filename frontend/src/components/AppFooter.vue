@@ -1,10 +1,12 @@
 <script setup lang="ts">
-import { onMounted, ref } from 'vue'
+import { onMounted, ref, watch } from 'vue'
+import { useRoute } from 'vue-router'
 
 import { getHealth } from '../api/health'
 
 type ConnectionState = 'checking' | 'ok' | 'failed'
 
+const route = useRoute()
 const state = ref<ConnectionState>('checking')
 const serviceName = ref('')
 
@@ -21,6 +23,9 @@ async function checkConnection(): Promise<void> {
 }
 
 onMounted(checkConnection)
+
+// 切换页面时重新检查：后端在页面停留期间恢复或中断后，指示器不会停在过期状态
+watch(() => route.fullPath, checkConnection)
 </script>
 
 <template>
