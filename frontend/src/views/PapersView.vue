@@ -21,7 +21,7 @@ import PaperFormModal from '../components/PaperFormModal.vue'
 import StatusBadge from '../components/StatusBadge.vue'
 import YearRangeSelect from '../components/YearRangeSelect.vue'
 import { pushToast } from '../composables/useToast'
-import { demoYears } from '../demo/coverage'
+import { useAvailableYears } from '../composables/useAvailableYears'
 import {
   allConferences,
   conferenceColors,
@@ -40,6 +40,9 @@ const route = useRoute()
 const router = useRouter()
 
 const PAGE_SIZE = 8
+
+// 年份选项来自后端覆盖数据（不再使用演示常量），进入页面时加载一次
+const { years: availableYears, load: loadAvailableYears } = useAvailableYears()
 
 const query = ref('')
 const matchMode = ref<MatchMode>('fuzzy')
@@ -350,6 +353,7 @@ watch(
 )
 
 onMounted(() => {
+  void loadAvailableYears()
   void load()
 })
 
@@ -413,7 +417,7 @@ onMounted(() => {
         <YearRangeSelect
           v-model:year-from="yearFrom"
           v-model:year-to="yearTo"
-          :years="demoYears"
+          :years="availableYears"
           label="年份区间"
           unlimited
         />

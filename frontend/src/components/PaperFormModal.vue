@@ -8,11 +8,11 @@
  * - 提交期间按钮进入提交中状态并禁止重复点击；
  * - 编号由服务端分配，表单内只读展示，编辑时也不允许修改。
  */
-import { computed, ref, watch } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 
 import { ApiError, createPaper, updatePaper } from '../api/paperApi'
 import { pushToast } from '../composables/useToast'
-import { demoYears } from '../demo/coverage'
+import { useAvailableYears } from '../composables/useAvailableYears'
 import { allConferences, type Conference, type PaperDetail } from '../types/paper'
 import AppModal from './AppModal.vue'
 
@@ -21,6 +21,13 @@ const props = defineProps<{
   /** 传入论文表示编辑，传 null 表示新增 */
   paper: PaperDetail | null
 }>()
+
+// 年份选项来自后端覆盖数据（不再使用演示常量）
+const { years: availableYears, load: loadAvailableYears } = useAvailableYears()
+
+onMounted(() => {
+  void loadAvailableYears()
+})
 
 const emit = defineEmits<{
   close: []
@@ -46,7 +53,7 @@ function emptyForm(): FormState {
   return {
     code: '',
     conference: 'CVPR',
-    year: demoYears[demoYears.length - 1] ?? 2025,
+    year: availableYears.value[availableYears.value.length - 1] ?? 2025,
     title: '',
     keywordsText: '',
     abstract: '',
@@ -181,7 +188,7 @@ function onClose(): void {
         <div>
           <label class="field-label" for="paper-year">年份</label>
           <select id="paper-year" v-model.number="form.year" class="select">
-            <option v-for="year in demoYears" :key="year" :value="year">{{ year }}</option>
+            <option v-for="year in availableYears" :key="year" :value="year">{{ year }}</option>
           </select>
         </div>
       </div>
