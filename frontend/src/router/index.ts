@@ -31,7 +31,8 @@ const router = createRouter({
       path: '/trends',
       name: 'trends',
       component: TrendsView,
-      meta: { title: '热度走势对比', dataSource: 'demo' satisfies DataSourceKind },
+      // 阶段 9 起趋势页接入 /api/stats/{summary,trend,top}，数值全部来自数据库
+      meta: { title: '热度走势对比', dataSource: 'api' satisfies DataSourceKind },
     },
     {
       path: '/papers',
