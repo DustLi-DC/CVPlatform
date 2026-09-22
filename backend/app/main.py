@@ -7,6 +7,7 @@
 from __future__ import annotations
 
 import logging
+from pathlib import Path
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from typing import Literal
@@ -172,3 +173,53 @@ app.include_router(collect.router)
 app.include_router(import_.router)
 app.include_router(stats.router)
 app.include_router(keywords.router)
+
+
+def _mount_frontend() -> None:
+    """可选：由后端直接托管前端产物，便于在**没有 Nginx** 的机器上单进程部署。
+
+    由环境变量 CVPLATFORM_SERVE_FRONTEND 指定前端 dist 目录（默认关闭，生产环境用
+    Nginx 提供静态文件时不需要它）。启用后：
+
+    - `/assets/**` 交给 StaticFiles 直接返回（文件名带内容哈希，可长缓存）；
+    - 其余非 API 路径回退到 index.html，使 Vue Router 的 history 模式刷新子路由不 404；
+    - **`/api/**` 与 `/docs`、`/openapi.json` 仍然走框架自身的路由与 404 语义**，
+      不会被前端回退吞掉（否则接口打错路径会拿到一份 HTML，排查会非常困难）。
+    """
+    import os
+
+    from fastapi.responses import FileResponse
+    from fastapi.staticfiles import StaticFiles
+
+    raw = os.environ.get("CVPLATFORM_SERVE_FRONTEND", "").strip()
+    if not raw:
+        return
+    dist = Path(raw).expanduser().resolve()
+    index_file = dist / "index.html"
+    if not index_file.exists():
+        logger.warning("CVPLATFORM_SERVE_FRONTEND=%s 下没有 index.html，跳过前端托管", dist)
+        return
+
+    assets_dir = dist / "assets"
+    if assets_dir.is_dir():
+        app.mount("/assets", StaticFiles(directory=assets_dir), name="assets")
+
+    reserved = ("api/", "docs", "redoc", "openapi.json")
+
+    @app.get("/{path:path}", include_in_schema=False)
+    async def serve_frontend(path: str):  # pragma: no cover - 由部署环境触发
+        if path.startswith(reserved):
+            return JSONResponse(
+                status_code=404,
+                content={"detail": {"code": "not_found", "message": "Not Found"}},
+            )
+        target = (dist / path).resolve()
+        # 真实存在的静态文件直接返回（favicon 等），其余交给前端路由
+        if path and target.is_file() and str(target).startswith(str(dist)):
+            return FileResponse(target)
+        return FileResponse(index_file)
+
+    logger.info("后端已托管前端产物：%s", dist)
+
+
+_mount_frontend()

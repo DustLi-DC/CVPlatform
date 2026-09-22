@@ -251,6 +251,45 @@ curl -s -o /dev/null -w '%{time_total}s\n' http://127.0.0.1:8000/api/stats/summa
 pip 以 cvplatform 身份装不进 root 属主的 venv（改为按 venv 属主选择身份）；重启前未校验服务是否指向生产库
 （新增启动前拦截与 `setup_service_env.sh`）。
 
+## 11b. 用户级部署（无 sudo / 无 systemd / 无 Nginx）
+
+适用于只能以普通用户登录的机器（例如 `ssh WORK2@65.52.167.95`；该机对本机不可直连，
+`10.1.1.4` 属内网亦不可达，因此以下步骤由人工执行）。与前面 systemd 方案的区别：
+
+| 项 | systemd 方案 | 用户级方案 |
+|---|---|---|
+| 运行身份 | 服务用户 `cvplatform` | 登录用户自己（如 `WORK2`） |
+| 代码 / 数据 | `/opt/cvplatform`、`/var/lib/cvplatform` | `~/cvplatform`、`~/cvplatform-data` |
+| 进程管理 | `systemctl` | `deploy/user/ctl.sh`（nohup + PID 文件） |
+| 前端托管 | Nginx 静态目录 | **由后端自己托管**（`CVPLATFORM_SERVE_FRONTEND`），单进程同时提供页面与接口 |
+| 需要 root | 是 | 否 |
+
+后端托管前端的实现要点（`app/main.py` 的 `_mount_frontend`）：`/assets/**` 走 StaticFiles，
+其余非 API 路径回退 `index.html`（Vue Router history 模式刷新不掉 404），
+而 `/api/**`、`/docs`、`/openapi.json` **仍走框架自身路由与 JSON 404 语义**——接口打错路径不会拿到 HTML。
+
+步骤：
+
+```bash
+# 开发机：打包并上传（发布包在 data/release/ 下）
+bash deploy/make_release.sh 1.0.0 --with-db
+scp data/release/cvplatform-release-1.0.0.tar.gz WORK2@65.52.167.95:/tmp/
+
+# 服务器：解包并安装（自动化程度最高的一步：建目录 → 建 venv → 装依赖 → 部署代码与前端
+#         → 放置数据库快照 → 写 env.sh → 启动 → 自检）
+cd ~ && tar -xzf /tmp/cvplatform-release-1.0.0.tar.gz
+bash ~/cvplatform-release-1.0.0/deploy/user/install.sh ~/cvplatform-release-1.0.0 --port 8000
+
+# 日常操作
+bash ~/cvplatform/deploy/user/ctl.sh status|logs|restart|stop
+```
+
+可调项：`--port`（默认 8000，被占用时换一个）、`--no-db`（保留现有数据库）、
+`CVPLATFORM_SKIP_DEPS=1`（依赖已装过时跳过 pip）。
+
+对外访问需要放行端口；若机器不对公网开放，用 SSH 端口转发即可：
+`ssh -L 8080:127.0.0.1:8000 WORK2@65.52.167.95`，再在本地打开 `http://127.0.0.1:8080`。
+
 ## 12. 本轮遗留
 
 - **无 SSH 权限**：本机公钥未授权到服务器，第 4–7 节需要人工执行，或授权后由我执行；
