@@ -816,6 +816,104 @@ def _cell_denominators(
     return {(str(conference), int(year)): int(count) for conference, year, count in rows}
 
 
+# ------------------------------------------------------------------ 数据覆盖
+
+
+def coverage_detail(session: Session) -> dict[str, object]:
+    """数据覆盖明细：每个会议年份的记录数、分析分母、关键词状态与来源分布。
+
+    与统计口径共用同一套有效性规则（分析集合来自 v_analysis_paper），
+    但**记录数**统计的是库中全部行（含待处理与失败），用于说明样本量而非分母。
+    """
+    rows = session.execute(
+        text(
+            """
+            SELECT p.conference AS conference,
+                   p.year AS year,
+                   COUNT(*) AS records,
+                   SUM(CASE WHEN p.abstract_status = 'present' THEN 1 ELSE 0 END)
+                     AS abstract_present,
+                   SUM(CASE WHEN p.keyword_status = 'done' THEN 1 ELSE 0 END)
+                     AS keyword_done,
+                   SUM(CASE WHEN p.keyword_status = 'pending' THEN 1 ELSE 0 END)
+                     AS keyword_pending,
+                   SUM(CASE WHEN p.keyword_status = 'failed' THEN 1 ELSE 0 END)
+                     AS keyword_failed
+              FROM paper p
+             WHERE p.conference IN ('CVPR', 'ICCV', 'ECCV') AND p.year > 0
+             GROUP BY p.conference, p.year
+             ORDER BY p.conference, p.year
+            """
+        )
+    ).all()
+    analysis_rows = session.execute(
+        text(
+            "SELECT conference, year, COUNT(*) FROM v_analysis_paper "
+            "GROUP BY conference, year"
+        )
+    ).all()
+    analysis_by_cell = {
+        (str(conference), int(year)): int(count)
+        for conference, year, count in analysis_rows
+    }
+    covered = [
+        {
+            "conference": str(row[0]),
+            "year": int(row[1]),
+            "records": int(row[2]),
+            "analysis_papers": analysis_by_cell.get((str(row[0]), int(row[1])), 0),
+            "abstract_present": int(row[3] or 0),
+            "keyword_done": int(row[4] or 0),
+            "keyword_pending": int(row[5] or 0),
+            "keyword_failed": int(row[6] or 0),
+        }
+        for row in rows
+    ]
+
+    # 论文的来源标识分布：说明数据「从哪来」，与来源页面一一对应
+    source_rows = session.execute(
+        text(
+            "SELECT source, COUNT(DISTINCT paper_id) FROM paper_source "
+            "GROUP BY source ORDER BY COUNT(DISTINCT paper_id) DESC"
+        )
+    ).all()
+    by_source = [
+        {"source": str(source), "papers": int(count)} for source, count in source_rows
+    ]
+
+    total_records = sum(item["records"] for item in covered)  # type: ignore[arg-type]
+    total_analysis = sum(item["analysis_papers"] for item in covered)  # type: ignore[arg-type]
+    coverage = _coverage(session)
+    return {
+        "conferences": list(CONFERENCES),
+        "target_conference_years": [
+            {"conference": conference, "year": year}
+            for conference, year in TARGET_CONFERENCE_YEARS
+        ],
+        "covered": covered,
+        "missing_conference_years": coverage["missing_conference_years"],
+        "totals": {
+            "records": total_records,
+            "analysis_papers": total_analysis,
+            "conference_years": len(covered),
+        },
+        "sampled": coverage["sampled"],
+        "sample_limit_per_conference_year": coverage["sample_limit_per_conference_year"],
+        "sample_basis": coverage["sample_basis"],
+        "by_source": by_source,
+        "data_updated_at": _now_updated_at(session),
+        "keyword_ruleset_version": _current_ruleset(session),
+        "topic_ruleset_version": _topic_ruleset(session),
+        "has_data": total_analysis > 0,
+    }
+
+
+def _topic_ruleset(session: Session) -> str:
+    """当前主题表版本（meta 由 initialize_database 同步自代码常量）。"""
+    row = session.get(AppMeta, "topic_ruleset_version")
+    return row.value if row is not None and row.value else ""
+
+
 # ------------------------------------------------------------------ 概览
 
 

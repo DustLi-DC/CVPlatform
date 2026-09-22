@@ -281,3 +281,53 @@ def test_scope_filters_are_applied_consistently_across_endpoints(client, temp_db
     assert top["items"][0]["count"] == 1
     assert graph["nodes"][0]["count"] == 1
     assert summary["total_sample"] == top["total_sample"] == graph["total_sample"]
+
+
+def test_coverage_endpoint_reports_empty_database(client):
+    """空库：覆盖为空、无数据，但字段齐全（不返回 null 结构）。"""
+    body = client.get("/api/stats/coverage").json()
+    assert body["covered"] == []
+    assert body["totals"] == {"records": 0, "analysis_papers": 0, "conference_years": 0}
+    assert body["has_data"] is False
+    assert body["by_source"] == []
+    assert len(body["target_conference_years"]) == 6
+    assert body["missing_conference_years"] == body["target_conference_years"]
+
+
+def test_coverage_endpoint_counts_records_and_denominator_separately(client, temp_db: Path):
+    """记录数与分析分母分开统计：待处理的记录进 records 但不进分母。"""
+    version = KEYWORD_RULESET_VERSION
+    insert_paper(
+        temp_db,
+        code="CVPR-2024-0001",
+        title="Coverage Done Paper For Tests",
+        keyword_status="done",
+        keyword_ruleset_version=version,
+    )
+    insert_paper(
+        temp_db,
+        code="CVPR-2024-0002",
+        title="Coverage Pending Paper For Tests",
+    )
+    from tests.helpers import connect
+
+    with connect(temp_db) as connection:
+        connection.execute(
+            "INSERT INTO paper_source (paper_id, source, source_id, retrieved_at)"
+            " SELECT id, 'cvf', code, '2026-01-01T00:00:00Z' FROM paper"
+        )
+
+    body = client.get("/api/stats/coverage").json()
+    assert body["totals"]["records"] == 2
+    assert body["totals"]["analysis_papers"] == 1
+    cell = next(
+        item
+        for item in body["covered"]
+        if item["conference"] == "CVPR" and item["year"] == 2024
+    )
+    assert cell["records"] == 2
+    assert cell["analysis_papers"] == 1
+    assert cell["keyword_pending"] == 1
+    assert body["by_source"] == [{"source": "cvf", "papers": 2}]
+    assert body["sampled"] is False
+    assert body["sample_basis"] == "unknown"

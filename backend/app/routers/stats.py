@@ -44,6 +44,16 @@ def group_by_param(
     return stats.parse_group_by(group_by)
 
 
+@router.get("/coverage", tags=["meta"])
+def get_coverage() -> dict[str, object]:
+    """数据覆盖明细：各会议年份的记录数与分析分母、来源分布、抽样性质。
+
+    关于页与首页的范围说明都用它，避免两处各写一套覆盖口径。
+    """
+    with session_scope() as session:
+        return stats.coverage_detail(session)
+
+
 @router.get("/summary")
 def get_summary(
     scope: stats.Scope = Depends(scope_params),
