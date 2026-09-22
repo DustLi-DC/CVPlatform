@@ -68,10 +68,18 @@ echo "  应用目录：$APP_DIR"
 echo "  数据目录：$DATA_DIR"
 echo "  数据库：  $DB_PATH"
 [[ -x "$APP_DIR/.venv/bin/python" ]] || fail "服务器虚拟环境不存在：$APP_DIR/.venv（请先按 deploy/README.md 初始化）"
-systemctl list-unit-files | grep -q "^$SERVICE" || fail "服务单元不存在：$SERVICE（模板见 deploy/cvplatform.service.example）"
+# 用 systemctl cat 判断单元是否存在：list-unit-files 的输出格式在不同环境下不一定能匹配，
+# 实测在目标服务器上匹配失败，而服务其实是 active 的。
+systemctl cat "$SERVICE" >/dev/null 2>&1 || fail "服务单元不存在：$SERVICE（模板见 deploy/cvplatform.service.example）"
 id cvplatform >/dev/null || fail "运行用户 cvplatform 不存在"
-# 排序输出各关键路径的当前状态，便于复核
-ls -ld "$APP_DIR" "$DATA_DIR" >/dev/null
+# 数据目录缺失时直接建好（首次部署常见），并交给运行用户
+if [[ ! -d "$DATA_DIR" ]]; then
+  echo "  数据目录不存在，创建：$DATA_DIR"
+  run "install -d -o cvplatform -g cvplatform -m 0750 '$DATA_DIR' '$DATA_DIR/backups'"
+else
+  run "install -d -o cvplatform -g cvplatform -m 0750 '$DATA_DIR/backups'"
+fi
+ls -ld "$APP_DIR" "$DATA_DIR"
 
 log "2/7 备份（数据库用 SQLite 在线备份接口，WAL 下也一致）"
 mkdir -p "$BACKUP_ROOT"

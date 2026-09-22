@@ -25,7 +25,11 @@ FAILED=0
 json_field() {
   local path="$1"
   local py
-  py="$(command -v python3 || command -v python || true)"
+  # 服务器上可能只有项目虚拟环境里的解释器（最小化 Ubuntu 镜像不带 python3）
+  for candidate in /opt/cvplatform/.venv/bin/python "$(dirname "$0")/../.venv/bin/python"; do
+    [[ -x "$candidate" ]] && { py="$candidate"; break; }
+  done
+  [[ -n "${py:-}" ]] || py="$(command -v python3 || command -v python || true)"
   [[ -n "$py" ]] || { echo ""; return; }
   curl -s -m 20 "${BASE}${path}" | "$py" -c "import json,sys; print(json.load(sys.stdin)$2)" 2>/dev/null || echo ""
 }
