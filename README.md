@@ -249,8 +249,21 @@ npm --prefix frontend run build
 
 ## 部署
 
-生产部署步骤（数据目录与权限、systemd 环境变量、备份、结构升级与回退）见 `deploy/README.md`，
-配置模板见 `deploy/env.example`，备份脚本见 `deploy/backup_database.py`。
+完整操作手册见 **[deploy/README.md](deploy/README.md)**（服务器现状、更新与回退命令、
+数据库替换与重采两种做法、2 核/2GB 下的参数、线上验收清单）。本目录提供的文件：
+
+| 文件 | 用途 |
+|---|---|
+| `deploy/README.md` | 部署与更新手册（含本轮实测的线上状态与遗留） |
+| `deploy/update.sh` | 服务端更新脚本：预检查 → 备份 → 替换 → 装依赖 → 迁移 → 重启 → 冒烟检查，支持 `--dry-run` |
+| `deploy/smoke_check.sh` | 只读冒烟检查：接口、错误契约、口径一致性、子路由与静态资源 |
+| `deploy/make_release.sh` | 在本机打包发布产物（`bash deploy/make_release.sh 1.0.0 [--with-db]`） |
+| `deploy/cvplatform.service.example` | systemd 单元模板（单 worker、只监听 127.0.0.1） |
+| `deploy/nginx.conf.example` | Nginx 站点模板（静态目录、`/api/` 代理、history 回退、HTTPS 段） |
+| `deploy/env.example` | 环境变量模板（只列代码真正读取的开关） |
+| `deploy/backup_database.py` | SQLite 在线备份（WAL 下也一致，不用停服务） |
+
+发布包在本机生成（`data/release/` 下，已被 Git 忽略，不入库），上传后按手册执行即可。
 
 ```bash
 # 服务器上（Ubuntu 24.04）

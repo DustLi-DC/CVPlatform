@@ -1,36 +1,71 @@
-# 部署配置增量（阶段 3）
+# CVPlatform 服务器部署与更新手册
 
-本目录保存服务器侧配置的**增量与说明**，不包含任何真实密钥。现有服务基线见 `../README.md` 与
-`../实施基线.md`（后者为本地工作文档）；本文件记录阶段 3 新增的数据库相关配置，供阶段 11 更新线上时使用。
+本目录保存服务器侧配置的**脱敏模板**与**可执行脚本**，不含任何真实密钥或凭据。
+本文件是更新线上环境时的操作手册：每一步都可以直接复制执行，命令里的路径与运行用户都已按
+当前服务器实际情况填写。
 
-## 1. 生产数据目录与权限
+## 1. 服务器现状（实际核对）
 
-数据库不再放在代码目录，而是独立到 `/var/lib/cvplatform`，这样**更新代码不会影响数据**。
+| 项目 | 实际值 | 来源 |
+|---|---|---|
+| 系统 | 华为云 Ubuntu 24.04，2 核 / 2GB / 2Mbps | 用户提供 |
+| 代码目录 | `/opt/cvplatform` | 用户提供 |
+| 服务单元 | `cvplatform.service` | 用户提供 |
+| 运行用户 | `cvplatform`（不可登录） | 用户提供 |
+| 后端监听 | `127.0.0.1:8000`，单 worker | 用户提供 |
+| 数据库 | `/var/lib/cvplatform/cvplatform.db` | 本仓库配置（`config.py`） |
+| 数据目录权限 | `cvplatform` 可写（WAL 需目录写权限） | 见第 3 节校验命令 |
+| Nginx | 1.24.0 (Ubuntu)，静态前端 + `/api/` 代理 | 本轮 `curl -sSI` 实测 |
+| 公网入口 | <http://123.249.79.118>（HTTP 200，健康检查通过） | 本轮实测 |
+| HTTPS | **未配置**（`https://123.249.79.118` 连接被重置） | 本轮实测，需域名与证书 |
+| 域名 | **缺失**，待人工提供 | 无 |
 
-| 项目 | 值 |
-|---|---|
-| 数据目录 | `/var/lib/cvplatform` |
-| 数据库文件 | `/var/lib/cvplatform/cvplatform.db` |
-| 备份目录 | `/var/lib/cvplatform/backups` |
-| 运行用户 / 组 | `cvplatform` / `cvplatform` |
-| 后端监听 | `127.0.0.1:8000`（单 worker） |
+**只存在于服务器、未纳入版本管理的配置**已在本目录补上脱敏模板：
 
-创建与授权（在服务器上以 root 执行）：
+| 服务器文件 | 模板 | 说明 |
+|---|---|---|
+| `/etc/systemd/system/cvplatform.service` | `cvplatform.service.example` | 单 worker、只监听本机、内存上限 800M |
+| `/etc/nginx/sites-available/cvplatform` | `nginx.conf.example` | 静态目录、`/api/` 代理、history 模式回退 |
+| `/etc/cvplatform.env` | `env.example` | 环境变量（权限 0640，属主 root:cvplatform） |
+
+> 本轮**未能直接登录服务器核对**：本机 `~/.ssh` 已有密钥、`known_hosts` 也含该 IP，
+> 但用 `ssh -o BatchMode=yes` 以 `root` 与 `cvplatform` 尝试均返回
+> `Permission denied (publickey,password)`——说明服务器上没有授权本机公钥。
+> 因此第 4–7 节的命令需要由**有权限的人工**在服务器上执行，或先为本机公钥授权后我再执行。
+
+## 2. 发布包里有什么
+
+发布包由本机构建，只含运行所需内容（不含 `.venv`、`node_modules`、测试与本地工作文档）：
+
+```text
+cvplatform-release-1.0.0/
+├── backend/                 # 后端源码（app/、tests/ 按需，运行时只需 app/）
+│   └── app/data/topics_v1.json   # 版本化主题表（运行时必需）
+├── frontend/dist/           # 本机构建的前端产物（index.html + assets/）
+├── deploy/                  # 本脚本与模板（update.sh、smoke_check.sh、backup_database.py）
+├── requirements.txt         # 生产依赖（不含 dev）
+├── README.md  数据覆盖与来源.md  codestyle.md
+└── data/cvplatform.db       # 可选：随包发布的生产数据库（见第 5 节，需要 --with-db）
+```
+
+生成方式（在仓库根目录执行，需已 `npm ci`）：
+
+```bash
+npm --prefix frontend run build
+.venv/Scripts/python.exe -m pip check
+# 打包脚本：bash deploy/make_release.sh 1.0.0 [--with-db]
+```
+
+## 3. 首次部署或数据目录校验
+
+若 `/var/lib/cvplatform` 还不存在，或不确定 `cvplatform` 用户能否写入（WAL 需要**目录**写权限）：
 
 ```bash
 sudo install -d -o cvplatform -g cvplatform -m 0750 /var/lib/cvplatform
 sudo install -d -o cvplatform -g cvplatform -m 0750 /var/lib/cvplatform/backups
-```
-
-**为什么必须是 `cvplatform` 用户可写整个目录，而不只是数据库文件**：SQLite 启用 WAL 后会在同目录
-创建 `cvplatform.db-wal` 与 `cvplatform.db-shm` 两个临时文件，写入时需要**目录写权限**。只给数据库
-文件写权限无法工作。
-
-校验（以运行用户身份实际写入，不只检查属主）：
-
-```bash
+# 以运行用户身份实际写入，并确认 WAL 可用
 sudo -u cvplatform test -w /var/lib/cvplatform && echo "目录可写"
-sudo -u cvplatform python3 -c "
+sudo -u cvplatform /opt/cvplatform/.venv/bin/python -c "
 import sqlite3
 c = sqlite3.connect('/var/lib/cvplatform/cvplatform.db')
 print('journal_mode =', c.execute('PRAGMA journal_mode=WAL').fetchone()[0])
@@ -42,109 +77,151 @@ print('运行用户写入与 WAL 均正常')
 "
 ```
 
-> 阶段 3 不接触服务器，因此上述命令**尚未在线上执行**；按任务要求，线上运行用户写入验证在阶段 11
-> 实际发布时执行并记录结果。
+## 4. 更新线上（推荐路径：git）
 
-## 2. systemd 环境变量
-
-服务单元需要读取 `/etc/cvplatform.env`（模板见 `env.example`）：
-
-```ini
-# /etc/systemd/system/cvplatform.service 的 [Service] 段增加
-EnvironmentFile=/etc/cvplatform.env
-```
-
-安装环境文件并保持最小可读权限：
+服务器上已是 git 检出时，用 git 更新最省事（`update.sh` 也支持发布包，见第 6 节）：
 
 ```bash
-sudo install -o root -g cvplatform -m 0640 deploy/env.example /etc/cvplatform.env
-sudo editor /etc/cvplatform.env      # 按实际填写，至少确认 CVPLATFORM_ENV 与 CVPLATFORM_DB_PATH
-sudo systemctl daemon-reload
-sudo systemctl restart cvplatform
+# 0) 先备份，再拉代码：备份脚本走 SQLite 在线备份接口，WAL 下也一致，不用停服务
+sudo -u cvplatform /opt/cvplatform/.venv/bin/python /opt/cvplatform/deploy/backup_database.py
+
+# 1) 拉取指定版本（用提交号或标签，保证可复现；不要直接跟 master 漂移）
+cd /opt/cvplatform
+sudo -u cvplatform git fetch --all --tags
+sudo -u cvplatform git checkout 1.0.0        # 或具体提交号
+
+# 2) 更新后端依赖（生产只装 requirements.txt）
+sudo -u cvplatform /opt/cvplatform/.venv/bin/pip install -r backend/requirements.txt
+
+# 3) 在本机（开发机）构建前端后同步产物，或在服务器上直接构建（需要 Node）：
+npm --prefix frontend ci && npm --prefix frontend run build
+
+# 4) 显式跑一次迁移（启动时也会自动执行；先单独跑便于看到结果与自动备份）
+sudo -u cvplatform env CVPLATFORM_ENV=production CVPLATFORM_DB_PATH=/var/lib/cvplatform/cvplatform.db \
+  PYTHONPATH=/opt/cvplatform/backend \
+  /opt/cvplatform/.venv/bin/python -c "from app.db.engine import init_database; print(init_database())"
+
+# 5) 重启服务
+sudo systemctl restart cvplatform.service
+sudo systemctl status cvplatform.service --no-pager
+
+# 6) 冒烟检查（只读，不改数据）
+bash /opt/cvplatform/deploy/smoke_check.sh
+bash /opt/cvplatform/deploy/smoke_check.sh http://123.249.79.118   # 同时检查公网入口
 ```
 
-启动日志会打印实际使用的数据库路径、环境与结构版本，可用来确认配置生效：
+数据库结构升级由应用启动时的 `initialize_database()` 按 `PRAGMA user_version` 判断，
+**只应用尚未应用的迁移**；需要变更结构时会自动再做一次在线备份（`reason=v<旧版本>`）。
+
+## 5. 数据库：保留旧数据，或换成随包的完整数据
+
+两种做法都先备份，按需要选一种：
+
+**A. 保留服务器现有数据库（默认）**：不额外操作，代码替换后数据仍在 `/var/lib/cvplatform`。
+若服务器上还没有数据，站点会是空库状态（各页面显示「暂无数据 / 分母 0」，这是如实呈现）。
+
+**B. 用发布包里的数据库替换（本次推荐，站点立即有 13 个会议年份、29,072 篇真实数据）**：
 
 ```bash
-journalctl -u cvplatform -n 20 | grep 数据库就绪
+# 1) 先备份现有库（务必先做）
+sudo -u cvplatform /opt/cvplatform/.venv/bin/python /opt/cvplatform/deploy/backup_database.py
+# 2) 停服务后替换（避免替换过程中有写入）
+sudo systemctl stop cvplatform.service
+sudo -u cvplatform cp /tmp/cvplatform-release-1.0.0/data/cvplatform.db /var/lib/cvplatform/cvplatform.db
+sudo rm -f /var/lib/cvplatform/cvplatform.db-wal /var/lib/cvplatform/cvplatform.db-shm
+sudo chown cvplatform:cvplatform /var/lib/cvplatform/cvplatform.db
+sudo systemctl start cvplatform.service
+bash /opt/cvplatform/deploy/smoke_check.sh
+# 3) 核对口径与数据量（应与随包数据一致：分母 29072、13 个会议年份）
+curl -s http://127.0.0.1:8000/api/stats/coverage | head -c 400
 ```
 
-## 3. 数据库路径解析规则
-
-由 `backend/app/config.py` 统一决定，优先级从高到低：
-
-1. 环境变量 `CVPLATFORM_DB_PATH` 有值 → 直接使用；
-2. `CVPLATFORM_ENV=production` → `/var/lib/cvplatform/cvplatform.db`；
-3. `CVPLATFORM_ENV=test` → 系统临时目录下按进程唯一命名（测试用，互不干扰）；
-4. 其他（开发默认） → `<仓库根>/data/cvplatform.db`，该目录已加入 `.gitignore`。
-
-**路径锚定仓库根而不是启动时的工作目录**，因此在任意目录启动服务，开发环境都指向同一个数据库文件。
-
-## 4. 备份
-
-统一使用 SQLite 在线备份接口，不需要停服务：
+**C. 让服务器自己重新采集数据集**（不在服务器装 pyarrow 也可以，JSON 分页回落到较慢）：
+需要服务器能访问 HuggingFace，且耗时约 6 分钟（下载）+ 9 分钟（关键词重算）：
 
 ```bash
-python3 deploy/backup_database.py /var/lib/cvplatform/cvplatform.db /var/lib/cvplatform/backups
+sudo -u cvplatform env CVPLATFORM_ENV=production PYTHONPATH=/opt/cvplatform/backend \
+  /opt/cvplatform/.venv/bin/python -m app.harvest_cli --datasets
+sudo -u cvplatform env CVPLATFORM_ENV=production PYTHONPATH=/opt/cvplatform/backend \
+  /opt/cvplatform/.venv/bin/python -m app.maintenance_cli process-keywords --force
+sudo -u cvplatform env CVPLATFORM_ENV=production PYTHONPATH=/opt/cvplatform/backend \
+  /opt/cvplatform/.venv/bin/python -m app.maintenance_cli reload-topics
 ```
 
-不传第二个参数时，备份目录默认为**数据库同级的 `backups/` 子目录**（即 `/var/lib/cvplatform/backups`），也可用 `CVPLATFORM_BACKUP_DIR` 覆盖。脚本会备份、做 `PRAGMA integrity_check` 校验，并保留最近 10 份；清理只针对**本脚本为同一个数据库生成的** `{库名}-时间戳.db` 文件，不会触碰同目录下的其他数据库或文件。
+## 6. 更新线上（备用路径：发布包脚本）
 
-**不要直接 `cp cvplatform.db`**：WAL 模式下已提交的数据可能还在 `cvplatform.db-wal` 里，复制主文件会
-拿到不完整或落后的数据。备份必须走 `Connection.backup()`（脚本已封装）。
-
-结构迁移执行前，应用自身也会自动留一份备份（文件名带 `bak-v<旧版本>-<时间戳>`），因此升级失败可以回退。
-
-## 5. 结构升级（保留数据）
+无法用 git 时，把发布包上传到服务器后：
 
 ```bash
-# 1) 升级前手动备份一次（双保险）
-python3 deploy/backup_database.py /var/lib/cvplatform/cvplatform.db
-
-# 2) 部署新代码并重启，启动时自动执行未应用的迁移
-sudo systemctl restart cvplatform
-journalctl -u cvplatform -n 20 | grep 数据库就绪   # 确认 结构版本 vN → vN+1
-
-# 3) 冒烟检查
-curl -s http://127.0.0.1:8000/api/health
-curl -s "http://127.0.0.1:8000/api/papers?page_size=1" | head -c 200
+sudo mkdir -p /tmp/cvplatform-release-1.0.0
+sudo tar -xzf cvplatform-release-1.0.0.tar.gz -C /tmp/cvplatform-release-1.0.0
+sudo bash /tmp/cvplatform-release-1.0.0/deploy/update.sh --release /tmp/cvplatform-release-1.0.0 --dry-run
+sudo bash /tmp/cvplatform-release-1.0.0/deploy/update.sh --release /tmp/cvplatform-release-1.0.0 --with-db
 ```
 
-迁移规则（见 `backend/app/db/migrations.py`）：
+`update.sh` 的顺序是：预检查 → 备份（数据库在线备份 + 代码与前端产物打包）→ 替换代码与产物 →
+装依赖 → 跑迁移（可选替换数据库）→ 重启服务 → 冒烟检查；任何一步失败即停止并打印回退命令。
 
-- 版本号载体为 SQLite 的 `PRAGMA user_version`，按 version 升序逐级执行，每步只执行一次；
-- 语句写成幂等（`IF NOT EXISTS`，改列前先查 `PRAGMA table_info`），重复执行不会报错；
-- **只增列、不删列、不改列类型**；需要改语义时新增列并回填，旧列保留；
-- 迁移只改结构。数据级演进（换关键词规则版本）不重建表，而是把受影响论文的
-  `keyword_status` 置回 `pending`，由后台任务增量重算，期间旧结果仍可查询但不计入当前版本统计。
-
-当前结构版本：**v1（initial_schema）**。
-
-## 6. 回退
+## 7. 回退
 
 ```bash
-# 1) 停止服务
-sudo systemctl stop cvplatform
+# 代码与前端产物
+sudo tar -xzf /var/lib/cvplatform/backups/app-<时间戳>.tar.gz -C /opt/cvplatform
+sudo systemctl restart cvplatform.service
 
-# 2) 用备份还原数据库（选择升级前的备份，或 bak-v<version> 文件）
-sudo -u cvplatform cp /var/lib/cvplatform/backups/cvplatform-<时间戳>.db \
-                       /var/lib/cvplatform/cvplatform.db
-sudo -u cvplatform rm -f /var/lib/cvplatform/cvplatform.db-wal \
-                         /var/lib/cvplatform/cvplatform.db-shm
-
-# 3) 部署上一版本代码并启动
-sudo systemctl start cvplatform
+# 数据库（选择升级前的那一份备份）
+ls -lt /var/lib/cvplatform/backups/
+sudo systemctl stop cvplatform.service
+sudo -u cvplatform cp /var/lib/cvplatform/backups/cvplatform-<升级前时间戳>.db /var/lib/cvplatform/cvplatform.db
+sudo rm -f /var/lib/cvplatform/cvplatform.db-wal /var/lib/cvplatform/cvplatform.db-shm
+sudo chown cvplatform:cvplatform /var/lib/cvplatform/cvplatform.db
+sudo systemctl start cvplatform.service
+bash /opt/cvplatform/deploy/smoke_check.sh
 ```
 
-回退前需确认代码版本与数据库结构版本匹配：若新代码已把结构升到 v2 而回退到只认 v1 的代码，
-SQLite 不会自动降级，必须连同数据库一起还原（上面第 2 步已经做到）。
+结构升级与代码回退要**成对**执行：代码回到旧版本时，数据库也应回到升级前的备份（旧代码不认识新列，
+但 SQLite 的「只增列不删列」策略下旧代码通常仍能运行；对称回退最稳妥）。
 
-## 7. 本阶段未在线上执行的部分
+## 8. 资源约束下的参数（2 核 / 2GB / 2Mbps）
 
-阶段 3 只做本地实现与本地测试数据库验证，以下项目留待阶段 11 实际发布时执行并记录：
+| 项 | 取值 | 说明 |
+|---|---|---|
+| 后端 worker | 1 | 多 worker 会让后台任务重复领取、放大 SQLite 写锁竞争 |
+| 出站请求 | 间隔 0.5s、串行、超时 10s、重试 2 次 | 见 `env.example`；遇 429/403 会自动退避（上限 10s） |
+| 关键词处理 | 每 200 篇提交一次 | 批量导入/重算时可中断续跑，WAL 不会无界增长 |
+| 统计缓存 | 进程内 64 条，按分析集合版本失效 | 冷启动约 1.4–2.2 秒（2.9 万篇），缓存命中 <1ms |
+| 图谱默认节点 | 40，可选 20/60/100 | 节点上限 200 时内存峰值约 25MB |
+| 服务内存上限 | `MemoryMax=800M` | 见服务模板，防止异常时拖死整机 |
 
-- `/var/lib/cvplatform` 的创建与授权；
-- 以 `cvplatform` 用户身份的实际写入与 WAL 验证；
-- `/etc/cvplatform.env` 的安装与 `EnvironmentFile` 生效确认；
-- 生产库的首次初始化与线上迁移执行记录；
-- 备份脚本在服务器上的首次运行结果。
+批量处理期间建议观察：
+
+```bash
+top -b -n1 | head -12                 # CPU 与内存
+systemctl show cvplatform.service -p MemoryCurrent
+curl -s -o /dev/null -w '%{time_total}s\n' http://127.0.0.1:8000/api/stats/summary   # 接口响应
+```
+
+## 9. 线上验收清单（执行后请回传结果）
+
+| 检查 | 命令 | 期望 |
+|---|---|---|
+| 服务与端口 | `systemctl is-active cvplatform.service` / `ss -ltnp \| grep 8000` | `active`；只在 `127.0.0.1:8000` 监听 |
+| 健康检查 | `curl -s http://127.0.0.1:8000/api/health` | `{"status":"ok",...}` |
+| 接口清单 | `curl -s http://127.0.0.1:8000/openapi.json \| grep -c '"\/api\/stats\/coverage"'` | `1`（确认是新版本） |
+| 数据口径 | `curl -s http://127.0.0.1:8000/api/stats/coverage` | 13 个会议年份、29072 篇，`coverage_kinds.full=13` |
+| 公网入口 | `curl -sI http://<域名或IP>/` | `200`，引用本机构建的 `assets/index-*.js` |
+| 子路由刷新 | `curl -sI http://<域名或IP>/trends` | `200`（history 模式回退生效，不是 404） |
+| 接口代理 | `curl -s http://<域名或IP>/api/health` | 同上，经 Nginx 代理 |
+| 运行用户写入 | 第 3 节的写入探针 | 「运行用户写入与 WAL 均正常」 |
+| 重启持久化 | `sudo systemctl restart cvplatform.service` 后再查论文数与分母 | 数值不变 |
+| 前端构建一致性 | `curl -s http://<域名或IP>/ \| grep -o 'assets/[^"]*'` 与 `ls frontend/dist/assets` | 文件名完全一致 |
+| HTTPS | `curl -k -sI https://<域名>/` | 有证书时 200；当前无证书，预期连接失败 |
+| 冒烟脚本 | `bash /opt/cvplatform/deploy/smoke_check.sh http://<域名或IP>` | 「全部通过」 |
+
+## 10. 本轮遗留
+
+- **无 SSH 权限**：本机公钥未授权到服务器，第 4–7 节需要人工执行，或授权后由我执行；
+- **无域名与证书**：HTTPS 未配置，`server_name` 暂用 IP，待域名提供后按 `nginx.conf.example` 的
+  HTTPS 段启用并验证；
+- `KEYWORD_VERSION_KEEP`（旧规则版本清理份数）在设计文档里提到，但**代码尚未实现**，
+  已从 `env.example` 移除，避免出现「改了却不生效」的配置项。

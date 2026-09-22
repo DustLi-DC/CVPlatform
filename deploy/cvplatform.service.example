@@ -1,0 +1,51 @@
+# CVPlatform 后端服务（脱敏模板）
+#
+# 用法：按实际路径填写后保存为 /etc/systemd/system/cvplatform.service，
+# 再 sudo systemctl daemon-reload && sudo systemctl enable --now cvplatform。
+#
+# 要点：
+# - 运行用户是非登录的 cvplatform 用户，只对自己的代码目录与数据目录有权限；
+# - 单 worker（--workers 1）：SQLite 写入与应用内的任务执行器都按单进程设计，
+#   多 worker 会让后台任务被重复领取、并放大写锁竞争；
+# - 只监听 127.0.0.1:8000，公网访问统一走 Nginx；
+# - 环境变量放在 /etc/cvplatform.env（模板见 deploy/env.example），
+#   该文件包含数据库路径等生产配置，权限 0640 且属主为 root:cvplatform。
+
+[Unit]
+Description=CVPlatform API (FastAPI + Uvicorn)
+After=network.target
+
+[Service]
+Type=simple
+User=cvplatform
+Group=cvplatform
+WorkingDirectory=/opt/cvplatform
+
+# 环境文件优先：里面的 CVPLATFORM_ENV/CVPLATFORM_DB_PATH 决定数据落在 /var/lib/cvplatform
+EnvironmentFile=-/etc/cvplatform.env
+Environment=PYTHONUNBUFFERED=1
+Environment=PYTHONPATH=/opt/cvplatform/backend
+
+ExecStart=/opt/cvplatform/.venv/bin/python -m uvicorn app.main:app \
+    --app-dir /opt/cvplatform/backend \
+    --host 127.0.0.1 \
+    --port 8000 \
+    --workers 1
+
+Restart=always
+RestartSec=3
+
+# 2 核 / 2GB：限制单进程可用内存，避免异常时把整机拖死
+MemoryMax=800M
+# 采集与关键词批处理是 CPU 密集型，正常优先级即可，不抢占系统
+Nice=0
+
+# 基本加固：只允许写自己的数据目录与代码目录
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+ProtectHome=true
+ReadWritePaths=/var/lib/cvplatform /opt/cvplatform
+
+[Install]
+WantedBy=multi-user.target
