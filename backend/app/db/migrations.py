@@ -319,9 +319,11 @@ def initialize_database(
     conn = sqlite3.connect(db_path)
     conn.row_factory = sqlite3.Row
     try:
+        # busy_timeout 必须在最前面：切换 journal_mode 需要短暂的排他锁，
+        # 若其他进程（例如正在运行的后端）持锁，没有等待时间就会直接报 database is locked
+        conn.execute("PRAGMA busy_timeout = 15000")
         conn.execute("PRAGMA journal_mode = WAL")
         conn.execute("PRAGMA foreign_keys = ON")
-        conn.execute("PRAGMA busy_timeout = 5000")
         # meta 表可能还不存在，先建最小结构以便迁移记录版本名
         conn.execute(
             "CREATE TABLE IF NOT EXISTS meta ("

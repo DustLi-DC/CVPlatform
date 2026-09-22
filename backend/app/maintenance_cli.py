@@ -60,8 +60,21 @@ def _fix_entities(apply: bool) -> int:
 
 def _process_keywords(limit: int | None, force: bool) -> int:
     started = time.perf_counter()
+
+    def on_progress(done: int, total: int) -> None:
+        elapsed = time.perf_counter() - started
+        speed = done / elapsed if elapsed > 0 else 0
+        left = (total - done) / speed if speed > 0 else 0
+        print(
+            f"  已处理 {done}/{total}（{done / total:.0%}，"
+            f"{speed:.0f} 篇/秒，预计剩余 {left / 60:.1f} 分钟）",
+            flush=True,
+        )
+
     with session_scope() as session:
-        summary = keyword_job.process_pending(session, limit=limit, force=force)
+        summary = keyword_job.process_pending(
+            session, limit=limit, force=force, on_progress=on_progress
+        )
     elapsed = time.perf_counter() - started
     print(
         f"处理完成：语料 {summary.corpus_size} 篇，已处理 {summary.processed}，"

@@ -35,7 +35,10 @@ KEYWORD_STATUSES: tuple[str, ...] = ("pending", "running", "done", "failed")
 #   - 补入学术行文与评价套话（demonstrate / existing 等实测占 30%~44%）
 #   - 短语最小文档频次 20 → 5（原阈值下全语料只有 102 个短语可用）
 #   - 支持 3d / 2d 这类数字开头的写法；同篇内被短语覆盖的通用裸词不再单列
-KEYWORD_RULESET_VERSION = "kw-v3"
+# kw-v4（语料扩到 2020—2026 完整论文集、约 2.9 万篇后按规模重新校准）：
+#   新增「大语料」档：min_df 5 → 20、短语阈值 5 → 50（固定阈值在 2.9 万篇上等于 0.017%，
+#   候选词表会爆炸到 1.4 万词 / 6.5 万短语，长尾噪声占绝大多数）
+KEYWORD_RULESET_VERSION = "kw-v4"
 # 主题表版本：与 backend/app/data/topics_v1.json 内的「版本」字段保持一致
 TOPIC_RULESET_VERSION = "topic-v2"
 
@@ -52,6 +55,15 @@ TARGET_CONFERENCE_YEARS: tuple[tuple[str, int], ...] = (
 
 # 每个会议年份的抽样目标条数（阶段 1 确认为约 200）
 HARVEST_SAMPLE_LIMIT = int(os.environ.get("HARVEST_SAMPLE_LIMIT") or 200)
+
+# 完整论文集来源：HuggingFace 上的 ai-conferences/<CONF><YEAR> 数据集（阶段 11 起作为主来源）。
+# 只纳入 min_year 之后的年份；纳入前抽样校验摘要覆盖率，未达阈值的年份跳过
+# （会议尚未结束、数据仍在补齐的年份不应写进库里）。
+DATASET_OWNER = "ai-conferences"
+DATASET_MIN_YEAR = int(os.environ.get("DATASET_MIN_YEAR") or 2020)
+DATASET_MIN_ABSTRACT_RATIO = float(os.environ.get("DATASET_MIN_ABSTRACT_RATIO") or 0.95)
+# datasets-server 的 rows 接口单次最多 100 行
+HF_PAGE_SIZE = 100
 
 # 分析集合要求的最小标题长度（归一化后）
 MIN_ANALYSIS_TITLE_LENGTH = 4

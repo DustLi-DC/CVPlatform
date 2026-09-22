@@ -208,14 +208,25 @@ def pending_papers(
     return list(session.exec(statement).all())
 
 
+# 每处理多少篇提交一次：语料扩大到数万篇后，整批一个事务会让 WAL 涨到几十 MB、
+# 中断后进度全部丢失、也看不到任何进度。设计文档 5.6 明确要求「按 200 篇一批提交」。
+KEYWORD_COMMIT_BATCH = 200
+
+
 def process_pending(
-    session: Session, *, limit: int | None = None, force: bool = False
+    session: Session,
+    *,
+    limit: int | None = None,
+    force: bool = False,
+    on_progress=None,
 ) -> ProcessingSummary:
-    """批量处理待处理论文；语料只拟合一次，逐篇抽取。
+    """批量处理待处理论文；语料只拟合一次，逐篇抽取，按批提交。
 
     供阶段 5 的单篇保存后调用，也供阶段 6、7 的批量任务复用。
+    `on_progress(已处理, 总数)` 用于命令行显示进度（不传则不回调）。
     """
     batch = pending_papers(session, limit=limit, force=force)
+    total = len(batch)
     summary = ProcessingSummary()
 
     extractor, corpus = build_extractor(session)
@@ -224,7 +235,7 @@ def process_pending(
     summary.phrases_enabled = extractor.tier.phrases_enabled
     summary.config_signature = extractor.config_signature()
 
-    for paper in batch:
+    for index, paper in enumerate(batch, start=1):
         try:
             result = extractor.extract(paper.title, paper.abstract)
             apply_result(session, paper, result)
@@ -237,6 +248,13 @@ def process_pending(
             paper.updated_at = _now()
             session.add(paper)
             summary.failed += 1
+
+        # 按批提交：中断时已处理的批次保留，重跑只处理剩余部分
+        if index % KEYWORD_COMMIT_BATCH == 0:
+            _set_meta(session, "data_updated_at", _now())
+            session.commit()
+            if on_progress is not None:
+                on_progress(index, total)
 
     summary.remaining = len(pending_papers(session))
     _set_meta(session, "data_updated_at", _now())
