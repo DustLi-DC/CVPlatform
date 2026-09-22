@@ -9,6 +9,14 @@
 # 产物：data/release/cvplatform-release-<版本>.tar.gz（data/ 已被 .gitignore 忽略）
 #      以及同目录的 SHA256SUMS.txt 与 FILES.txt（文件清单，便于人工核对发布内容）
 
+# 自愈：文件若是 CRLF 行尾（从 Windows 打包/解压时常见），转成 LF 的临时文件后重新执行。
+# 否则 bash 会把每行末尾的 CR 当命令的一部分，报 $'\r': command not found。
+if [ -f "$0" ] && LC_ALL=C grep -q $'\r' "$0" 2>/dev/null; then
+  LF_TMP="$(mktemp)"
+  tr -d '\r' < "$0" > "$LF_TMP"
+  exec bash "$LF_TMP" "$@"
+fi
+
 set -euo pipefail
 
 VERSION="${1:-1.0.0}"
@@ -61,6 +69,16 @@ if [[ "$WITH_DB" == "--with-db" ]]; then
   SNAPSHOT="$(ls -t "$STAGE/data/"*.db | head -1)"
   mv -f "$SNAPSHOT" "$STAGE/data/cvplatform.db"
   echo "  数据库快照：$(du -m "$STAGE/data/cvplatform.db" | cut -f1) MB"
+fi
+
+echo "== 统一行尾为 LF =="
+PY_BIN="$ROOT/.venv/Scripts/python.exe"
+[[ -x "$PY_BIN" ]] || PY_BIN="$(command -v python3 || command -v python || true)"
+if [[ -n "$PY_BIN" ]]; then
+  # 归一化交给独立脚本：避免在多层引号里写反斜杠转义（首次实现就在这上面踩过坑）
+  "$PY_BIN" "$ROOT/deploy/normalize_eol.py" "$STAGE"
+else
+  echo "  !! 本机没有可用的 python，无法保证行尾为 LF（服务器上的脚本自带 CRLF 自愈，仍可执行）"
 fi
 
 echo "== 生成清单与校验和 =="

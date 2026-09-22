@@ -8,6 +8,14 @@
 #   bash deploy/verify_release.sh                                   # 用 data/release 下最新的包
 #   bash deploy/verify_release.sh data/release/cvplatform-release-1.0.0.tar.gz
 
+# 自愈：文件若是 CRLF 行尾（从 Windows 打包/解压时常见），转成 LF 的临时文件后重新执行。
+# 否则 bash 会把每行末尾的 CR 当命令的一部分，报 $'\r': command not found。
+if [ -f "$0" ] && LC_ALL=C grep -q $'\r' "$0" 2>/dev/null; then
+  LF_TMP="$(mktemp)"
+  tr -d '\r' < "$0" > "$LF_TMP"
+  exec bash "$LF_TMP" "$@"
+fi
+
 set -uo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -51,6 +59,20 @@ for pattern in '.venv/' 'node_modules/' '__pycache__/' '/tests/' '实施基线.m
 done
 
 echo
+echo "== 2b) 文本文件行尾必须是 LF =="
+PY_BIN="$ROOT/.venv/Scripts/python.exe"
+[[ -x "$PY_BIN" ]] || PY_BIN="$(command -v python3 || command -v python || true)"
+if [[ -n "$PY_BIN" ]]; then
+  if "$PY_BIN" "$ROOT/deploy/normalize_eol.py" "$PKG" --check >/dev/null 2>&1; then
+    ok "脚本、Python 与配置模板均为 LF"
+  else
+    fail "存在 CRLF 行尾（服务器上会报 $'\r' 错误）；详情：bash deploy/verify_release.sh 后见 normalize_eol.py 输出"
+    "$PY_BIN" "$ROOT/deploy/normalize_eol.py" "$PKG" --check | sed 's/^/     /' || true
+  fi
+else
+  echo "  -- 本机没有可用的 python，跳过行尾检查"
+fi
+
 echo "== 3) 前端产物与本机构建一致 =="
 if [[ -d "$ROOT/frontend/dist/assets" ]]; then
   LOCAL="$(cd "$ROOT/frontend/dist/assets" && ls | sort | tr '\n' ' ')"

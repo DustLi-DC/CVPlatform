@@ -20,6 +20,14 @@
 #   --skip-deps    跳过 pip 依赖安装（依赖没变时可用）
 #   --dry-run      只打印将执行的动作，不做任何修改
 
+# 自愈：文件若是 CRLF 行尾（从 Windows 打包/解压时常见），转成 LF 的临时文件后重新执行。
+# 否则 bash 会把每行末尾的 CR 当命令的一部分，报 $'\r': command not found。
+if [ -f "$0" ] && LC_ALL=C grep -q $'\r' "$0" 2>/dev/null; then
+  LF_TMP="$(mktemp)"
+  tr -d '\r' < "$0" > "$LF_TMP"
+  exec bash "$LF_TMP" "$@"
+fi
+
 set -euo pipefail
 
 APP_DIR=/opt/cvplatform

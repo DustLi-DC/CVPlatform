@@ -8,6 +8,14 @@
 # 检查内容：健康检查、统计接口、页面与子路由、静态资源、错误契约、数据库口径一致性。
 # 只做 GET 请求，不修改任何数据；失败项以 !! 标出并以非零状态退出。
 
+# 自愈：文件若是 CRLF 行尾（从 Windows 打包/解压时常见），转成 LF 的临时文件后重新执行。
+# 否则 bash 会把每行末尾的 CR 当命令的一部分，报 $'\r': command not found。
+if [ -f "$0" ] && LC_ALL=C grep -q $'\r' "$0" 2>/dev/null; then
+  LF_TMP="$(mktemp)"
+  tr -d '\r' < "$0" > "$LF_TMP"
+  exec bash "$LF_TMP" "$@"
+fi
+
 set -uo pipefail
 
 BASE="${1:-http://127.0.0.1:8000}"
