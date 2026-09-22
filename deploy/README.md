@@ -217,6 +217,8 @@ curl -s -o /dev/null -w '%{time_total}s\n' http://127.0.0.1:8000/api/stats/summa
 | 前端构建一致性 | `curl -s http://<域名或IP>/ \| grep -o 'assets/[^"]*'` 与 `ls frontend/dist/assets` | 文件名完全一致 |
 | HTTPS | `curl -k -sI https://<域名>/` | 有证书时 200；当前无证书，预期连接失败 |
 | 冒烟脚本 | `bash /opt/cvplatform/deploy/smoke_check.sh http://<域名或IP>` | 「全部通过」 |
+| **云端数据源可达** | `for u in https://openaccess.thecvf.com/ https://www.ecva.net/papers.php https://api.openalex.org/works?per_page=1 https://datasets-server.huggingface.co/info; do curl -sI -m 15 "$u" \| head -1; done` | 单篇采集与在线兜底依赖这四个出站地址；若被安全组或代理拦截，采集与「未命中联网检索」会退化为「来源不可用」 |
+| 采集链路端到端 | 在 `/collect` 用库中不存在的题目检索一次 | 返回候选列表或如实报「联网未找到 / 来源不可用」；HTTP 必须是 200 或 502/504（业务结局），不能是 500 |
 
 ## 10. 本轮遗留
 
