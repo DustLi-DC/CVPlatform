@@ -329,5 +329,8 @@ def test_coverage_endpoint_counts_records_and_denominator_separately(client, tem
     assert cell["analysis_papers"] == 1
     assert cell["keyword_pending"] == 1
     assert body["by_source"] == [{"source": "cvf", "papers": 2}]
-    assert body["sampled"] is False
+    # 没有数据集导入记录的抽样目标年份（CVPR 2024 在目标范围内）判为 sampled；
+    # 整体 sampled 只在「没有任何完整论文集」时为真
+    assert body["coverage_kinds"]["sampled"] == 1
+    assert body["sampled"] is True
     assert body["sample_basis"] == "unknown"

@@ -31,7 +31,8 @@ from tests.helpers import (
     set_meta,
 )
 
-STALE_VERSION = "kw-v2"
+# 用一个明确不等于当前常量的版本号，否则「切版本」这一步不会产生任何变化
+STALE_VERSION = "kw-v1"
 
 
 @pytest.fixture()
@@ -301,7 +302,7 @@ def test_ruleset_change_moves_papers_out_of_denominator(caliber, temp_db: Path):
     assert before["denominator"] == 7
     assert before["keyword_ruleset_version"] == KEYWORD_RULESET_VERSION
 
-    set_meta(temp_db, "keyword_ruleset_version", "kw-v4")
+    set_meta(temp_db, "keyword_ruleset_version", "kw-v99")
     with session_scope() as session:
         after = stats.summary(session, stats.parse_scope())
         top_after = stats.top(session, stats.parse_scope())

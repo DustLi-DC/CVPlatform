@@ -119,10 +119,18 @@ const coverageNote = computed(() => {
   const coverage = summary.value?.coverage
   if (!coverage) return ''
   const parts: string[] = []
-  if (coverage.sampled && coverage.sample_limit_per_conference_year) {
+  const kinds = coverage.coverage_kinds
+  const fullYears = (coverage.full_coverage_years ?? []).length
+  if (fullYears) {
     parts.push(
-      `本平台按抽样采集：每个会议年份最多 ${coverage.sample_limit_per_conference_year} 篇，` +
-        '占比反映的是样本内的相对热度，不等同于整届大会的录用比例。',
+      `其中 ${fullYears} 个会议年份是 2020 年及以后的完整论文集，` +
+        '这些年份的占比即该届录用论文中的比例。',
+    )
+  }
+  if (kinds && kinds.sampled + kinds.partial > 0 && coverage.sample_limit_per_conference_year) {
+    parts.push(
+      `另有 ${kinds.sampled + kinds.partial} 个会议年份为抽样` +
+        `（每组合最多 ${coverage.sample_limit_per_conference_year} 篇），只反映样本内的相对热度。`,
     )
   }
   if (coverage.missing_conference_years.length) {

@@ -30,10 +30,18 @@ export interface StatsUnmapped {
 
 export interface StatsCoverage {
   conference_years: number
+  /**
+   * 是否「全部已覆盖的会议年份都是抽样」。有完整论文集时为 false，
+   * 具体性质看 coverage_kinds 与 full_coverage_years —— 不能用一句「抽样」概括混合数据。
+   */
   sampled: boolean
   sample_limit_per_conference_year: number | null
   /** sampled 的判定依据：meta / counts_match_limit / unknown */
   sample_basis: string
+  /** 各会议年份的数据性质计数 */
+  coverage_kinds: { full: number; partial: number; sampled: number; unknown: number }
+  /** 完整论文集覆盖的会议年份（2020 年及以后导入的数据集） */
+  full_coverage_years: { conference: string; year: number }[]
   missing_conference_years: { conference: string; year: number }[]
 }
 
@@ -158,10 +166,14 @@ export interface StatsTrend {
   group_by: string
 }
 
+/** 单个会议年份的数据性质：完整论文集 / 试跑截断 / 抽样 / 未知 */
+export type CoverageKind = 'full' | 'partial' | 'sampled' | 'unknown'
+
 /** 单个会议年份的覆盖明细 */
 export interface CoverageCell {
   conference: string
   year: number
+  coverage_kind: CoverageKind
   /** 库中记录数（含待处理与失败） */
   records: number
   /** 进入分析分母的论文数 */
@@ -182,6 +194,21 @@ export interface StatsCoverageDetail {
   sampled: boolean
   sample_limit_per_conference_year: number | null
   sample_basis: string
+  coverage_kinds: { full: number; partial: number; sampled: number; unknown: number }
+  /** 完整论文集覆盖的会议年份 */
+  full_coverage_years: { conference: string; year: number }[]
+  /** 已导入的数据集及其修订号，用于说明「这批数据来自哪个版本」 */
+  datasets: {
+    dataset: string
+    conference: string
+    year: number | null
+    rows: number | null
+    revision: string | null
+    imported_at: string | null
+    limit: number | null
+    created: number | null
+    updated: number | null
+  }[]
   /** 论文来源标识分布，说明数据来自哪个来源页面 */
   by_source: { source: string; papers: number }[]
   data_updated_at: string | null

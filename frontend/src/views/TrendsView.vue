@@ -166,10 +166,15 @@ const coverageHint = computed(() => {
   const coverage = summary.value?.coverage
   if (!coverage) return ''
   const parts: string[] = []
-  if (coverage.sampled && coverage.sample_limit_per_conference_year) {
+  const kinds = coverage.coverage_kinds
+  const fullYears = (coverage.full_coverage_years ?? []).length
+  if (fullYears) {
+    parts.push(`其中 ${fullYears} 个会议年份为完整论文集，占比即该届录用论文中的比例。`)
+  }
+  if (kinds && kinds.sampled + kinds.partial > 0 && coverage.sample_limit_per_conference_year) {
     parts.push(
-      `每个会议年份最多采集 ${coverage.sample_limit_per_conference_year} 篇，是抽样样本，` +
-        '占比表示样本内的相对热度。',
+      `另有 ${kinds.sampled + kinds.partial} 个会议年份为抽样` +
+        `（每组合最多 ${coverage.sample_limit_per_conference_year} 篇）。`,
     )
   }
   if (coverage.missing_conference_years.length) {
@@ -662,7 +667,7 @@ watch(() => route.query.kw, applyRouteQuery)
           </span>
           <span v-if="trend">
             当前范围共 {{ trend.key_total }} 个主题可用于比较；分母为各会议年份纳入分析的论文数，
-            样本性质：{{ trend.coverage.sampled ? `抽样（每会议年份约 ${trend.coverage.sample_limit_per_conference_year} 篇）` : '未标注' }}。
+            数据性质：{{ (trend.coverage.full_coverage_years ?? []).length }} 个会议年份为完整论文集{{ (trend.coverage.coverage_kinds?.sampled ?? 0) > 0 ? `，另有 ${trend.coverage.coverage_kinds.sampled} 个为抽样` : '' }}。
           </span>
           <span v-if="comparedKeys.length > 1">
             比较多个主题时<strong>线型</strong>表示主题、<strong>颜色</strong>表示会议。

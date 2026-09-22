@@ -65,6 +65,7 @@ const coverageSummary = computed(() => {
   const missing = data.missing_conference_years
     .map((item) => `${item.conference} ${item.year}`)
     .join('、')
+  const kinds = data.coverage_kinds ?? { full: 0, partial: 0, sampled: 0, unknown: 0 }
   return {
     years: conferenceYears.value.length
       ? `${conferenceYears.value[0]} — ${conferenceYears.value[conferenceYears.value.length - 1]}`
@@ -73,6 +74,11 @@ const coverageSummary = computed(() => {
     records: data.totals.records,
     analysis: data.totals.analysis_papers,
     missing,
+    kinds,
+    fullYears: (data.full_coverage_years ?? []).length,
+    sampledYears: kinds.sampled + kinds.partial,
+    // 数据集列表：只展示真正按完整论文集导入的（limit 为空）
+    fullDatasets: (data.datasets ?? []).filter((item) => item.limit === null),
     sampled: data.sampled,
     sampleLimit: data.sample_limit_per_conference_year,
     abstractRate: (() => {
@@ -271,17 +277,44 @@ const dataSources = [
       </dl>
 
       <p v-if="coverageError" class="field-error" role="alert">{{ coverageError }}</p>
-      <p v-else-if="coverageSummary" class="section-text">
-        <strong>抽样性质</strong>：
-        <template v-if="coverageSummary.sampled">
-          本平台按抽样采集，每个会议年份最多 {{ coverageSummary.sampleLimit }} 篇，
-          占比表示样本内的相对热度，<strong>不等于整届大会的录用比例</strong>。
-        </template>
-        <template v-else>尚未标注抽样性质。</template>
-        <template v-if="coverageSummary.missing">
-          目标范围内还没采集到数据的组合：{{ coverageSummary.missing }}。
-        </template>
-      </p>
+      <template v-else-if="coverageSummary">
+        <p class="section-text">
+          <strong>数据性质</strong>：
+          <template v-if="coverageSummary.fullYears">
+            其中 {{ coverageSummary.fullYears }} 个会议年份是<strong>完整论文集</strong>
+            （2020 年及以后的会议，逐届全部录用论文），这些年份的占比就是该届录用论文中的比例。
+          </template>
+          <template v-if="coverageSummary.sampledYears">
+            另有 {{ coverageSummary.sampledYears }} 个会议年份为抽样（每组合最多
+            {{ coverageSummary.sampleLimit }} 篇），只表示样本内的相对热度。
+          </template>
+          <template v-if="coverageSummary.missing">
+            目标范围内还没采集到数据的组合：{{ coverageSummary.missing }}。
+          </template>
+        </p>
+
+        <div v-if="coverageSummary.fullDatasets.length" class="dataset-block">
+          <h3 class="dataset-title">完整论文集的数据集与版本</h3>
+          <p class="section-text">
+            下列数据集来自 HuggingFace 上公开的会议论文集镜像，逐届一个数据集；
+            每篇论文同时保留官方原文链接（CVF / ECVA），可逐条回溯到会议页面。
+            括号中的修订号可以精确复现「这批数据来自哪个版本」。
+          </p>
+          <ul class="dataset-list">
+            <li v-for="item in coverageSummary.fullDatasets" :key="item.dataset">
+              <a
+                :href="`https://huggingface.co/datasets/${item.dataset}`"
+                target="_blank"
+                rel="noopener noreferrer"
+              >{{ item.dataset }}</a>
+              <span class="dataset-meta">
+                {{ item.rows }} 篇 · 导入 {{ (item.imported_at ?? '').slice(0, 10) }}
+                <template v-if="item.revision"> · 修订 {{ item.revision.slice(0, 8) }}</template>
+              </span>
+            </li>
+          </ul>
+        </div>
+      </template>
 
       <ChartContainer
         class="coverage-chart"
@@ -471,6 +504,36 @@ const dataSources = [
 </template>
 
 <style scoped>
+.dataset-block {
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 1px solid var(--color-border-soft);
+}
+
+.dataset-title {
+  margin-bottom: 8px;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--color-text-strong);
+}
+
+.dataset-list {
+  display: grid;
+  gap: 6px;
+  margin-top: 8px;
+  font-size: 13px;
+}
+
+.dataset-list a {
+  color: var(--color-primary);
+}
+
+.dataset-meta {
+  margin-left: 8px;
+  color: var(--color-text-subtle);
+  font-size: 12px;
+}
+
 .source-url {
   margin-top: 6px;
   font-size: 12px;
