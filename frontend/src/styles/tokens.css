@@ -16,10 +16,20 @@
   --color-conf-iccv: #0d9488;
   --color-conf-eccv: #ea580c;
 
-  /* 主题分组色（与会议色分别管理，仅用于图谱分组辨识） */
+  /*
+   * 主题分组色（与会议色分别管理，仅用于图谱与榜单的分组辨识）。
+   * 分组名取自主题表 topic.group_name，共 9 类，色相彼此错开；
+   * 未分组或分组未知时用 --color-group-none。
+   */
   --color-group-perception: #1d4ed8;
   --color-group-three-d: #0d9488;
+  --color-group-generative: #c026d3;
   --color-group-multimodal: #ea580c;
+  --color-group-video: #0891b2;
+  --color-group-learning: #7c3aed;
+  --color-group-robustness: #b91c1c;
+  --color-group-efficiency: #a16207;
+  --color-group-application: #15803d;
   --color-group-none: #94a3b8;
 
   /* 中性色阶 */
