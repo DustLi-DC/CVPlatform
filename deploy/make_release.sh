@@ -65,8 +65,8 @@ fi
 
 echo "== 生成清单与校验和 =="
 ( cd "$STAGE" && find . -type f | sort > FILES.txt )
-( cd "$STAGE" && find . -type f -not -name FILES.txt -exec shasum -a 256 {} \; | sort -k2 > SHA256SUMS.txt 2>/dev/null \
-  || find . -type f -not -name FILES.txt -exec sha256sum {} \; | sort -k2 > SHA256SUMS.txt )
+( cd "$STAGE" && find . -type f -not -name FILES.txt -not -name SHA256SUMS.txt -exec shasum -a 256 {} \; | sort -k2 > SHA256SUMS.txt 2>/dev/null \
+  || find . -type f -not -name FILES.txt -not -name SHA256SUMS.txt -exec sha256sum {} \; | sort -k2 > SHA256SUMS.txt )
 echo "  文件数：$(wc -l < "$STAGE/FILES.txt")"
 
 echo "== 打包 =="
