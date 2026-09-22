@@ -21,6 +21,9 @@ class PaperKeywordOut(BaseModel):
     name: str
     origin: KeywordOriginName
     topic: str | None = Field(default=None, description="归并到的主題；未归类为 null")
+    topic_group: str | None = Field(
+        default=None, description="主题分组，用于取分组配色；未归类为 null"
+    )
 
 
 class PaperSourceOut(BaseModel):

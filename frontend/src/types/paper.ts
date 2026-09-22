@@ -25,6 +25,8 @@ export interface PaperKeyword {
   origin: KeywordOrigin
   /** 归并到的主題；未归类为 null，界面标注「未归类」 */
   topic: string | null
+  /** 主题分组（用于取分组配色）；未归类为 null */
+  topic_group: string | null
 }
 
 export interface PaperSourceRef {

@@ -55,7 +55,6 @@ CVPlatform/
 │   │   ├── api/               # HTTP 请求（health、paperApi、collectApi、importApi、statsApi）
 │   │   ├── components/        # 可复用组件（含 ECharts 图谱与趋势曲线）
 │   │   ├── composables/       # 组合式函数（轻提示、ECharts 按需注册）
-│   │   ├── demo/              # 仍使用演示常量的地方（论文表单年份选项、关于页兜底）
 │   │   ├── layouts/           # 公共布局
 │   │   ├── router/            # 六个页面路由与数据来源标记
 │   │   ├── styles/            # 设计令牌与公共 UI 样式
@@ -77,8 +76,9 @@ CVPlatform/
 | `/collect` | 采集与导入 | 后端接口 `/api/collect/*`、`/api/import/*` |
 | `/about` | 关于平台 | 后端接口 `/api/stats/coverage` + 静态说明 |
 
-数据边界：已接入接口的页面直接显示数据库内容，不混用演示数据；未接入的页面在页头标注
-「演示数据 / 尚未接入后端接口」，不显示虚假的处理进度。缺失值显示为「—」或「无记录」，不写成 0。
+数据边界：六个页面的数据全部来自后端接口，`frontend/src/demo/` 已随接入完成删除，
+页面不再保留任何演示数值。范围与口径说明由 `/api/stats/coverage` 驱动（覆盖范围、数据性质、
+规则版本、主题表规模都从接口取），缺失值显示为「—」「无记录」或「该届不举办」，不写成 0。
 
 ## 安装
 

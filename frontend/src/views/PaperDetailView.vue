@@ -221,6 +221,7 @@ watch(paperId, () => void load(), { immediate: true })
                     :name="keyword.name"
                     origin="author"
                     :topic="keyword.topic"
+                    :topic-group="keyword.topic_group"
                     @click="openKeyword(keyword.name)"
                   />
                 </template>

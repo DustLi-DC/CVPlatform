@@ -121,6 +121,29 @@ const excludedNote = computed(() => {
 })
 
 /** 覆盖说明：样本性质、未覆盖的目标组合，以及未归类关键词的规模 */
+/** 顶部提示：说明本次统计的数据性质与范围，范围变了文案跟着变 */
+const heroNotice = computed(() => {
+  const coverage = summary.value?.coverage
+  if (!coverage) return ''
+  const fullYears = (coverage.full_coverage_years ?? []).length
+  const kinds = coverage.coverage_kinds
+  const sampledYears = (kinds?.sampled ?? 0) + (kinds?.partial ?? 0)
+  const parts: string[] = []
+  if (fullYears) {
+    parts.push(
+      `本页统计基于 ${fullYears} 个会议年份的完整论文集（该届全部录用论文），` +
+        '占比即该届录用论文中的比例。',
+    )
+  }
+  if (sampledYears) {
+    parts.push(
+      `另有 ${sampledYears} 个会议年份为抽样（每组合最多 ` +
+        `${coverage.sample_limit_per_conference_year ?? 200} 篇），只表示样本内的相对热度。`,
+    )
+  }
+  return parts.join('')
+})
+
 const coverageNote = computed(() => {
   const coverage = summary.value?.coverage
   if (!coverage) return ''
@@ -363,13 +386,7 @@ onMounted(async () => {
       eyebrow="页面 1 / 热门方向总览"
       title="计算机视觉顶会热词分析"
       description="面向刚接触计算机视觉的同学：把 CVPR、ICCV、ECCV 近几年已采集的论文题目与摘要放在一起统计，先看清哪些方向在被反复研究，再顺着热词找到值得读的论文。"
-      :notice="
-        summary?.coverage.sampled
-          ? '本页为抽样样本统计（每会议年份约 ' +
-            (summary?.coverage.sample_limit_per_conference_year ?? 0) +
-            ' 篇），占比表示样本内的相对热度，不代表整届大会的录用比例。'
-          : ''
-      "
+      :notice="heroNotice"
       :stats="[
         {
           label: '纳入论文样本',

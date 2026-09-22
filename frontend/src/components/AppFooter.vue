@@ -33,8 +33,8 @@ watch(() => route.fullPath, checkConnection)
     <div class="layout-container footer-inner">
       <div class="footer-left">
         <span>
-          CVPlatform · 课程项目 · 页面数值来自平台自采样本（每会议年份 200 篇），
-          只描述该样本，不等同于整届大会或领域结论。
+          CVPlatform · 课程项目 · 页面数值来自平台采集的会议论文数据，
+          覆盖范围与统计口径见「关于平台」，不等同于整个领域的结论。
         </span>
       </div>
       <div class="footer-right">

@@ -731,6 +731,9 @@ def load_paper_keywords(
                 "name": keyword.name,
                 "origin": keyword.origin,
                 "topic": topic.name if topic is not None else None,
+                # 主题分组一并返回：界面用它取分组配色（与图谱、榜单同一套色），
+                # 只给主题名的话前端得自己再维护一份「主题 → 分组」映射，必然漂移
+                "topic_group": topic.group_name if topic is not None else None,
             }
         )
     return grouped

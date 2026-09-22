@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 
-import { findDemoTopic, topicGroupColors } from '../demo/topics'
+import { groupColor, topicGroupFallbackColor } from '../types/stats'
 import type { PaperKeyword } from '../types/paper'
 
 const props = withDefaults(
@@ -11,17 +11,17 @@ const props = withDefaults(
     origin?: PaperKeyword['origin']
     /** 主题名；未归类时显示“未归类”标记 */
     topic?: string | null
+    /** 主题分组：用于取分组配色（与图谱、榜单同一套色） */
+    topicGroup?: string | null
     /** 是否可点击（可点击时用于按关键词筛选论文） */
     interactive?: boolean
   }>(),
-  { origin: 'system', topic: null, interactive: true },
+  { origin: 'system', topic: null, topicGroup: null, interactive: true },
 )
 
-const dotColor = computed(() => {
-  if (!props.topic) return topicGroupColors.none
-  const topic = findDemoTopic(props.topic)
-  return topic ? topicGroupColors[topic.group] : topicGroupColors.none
-})
+const dotColor = computed(() =>
+  props.topicGroup ? groupColor(props.topicGroup) : topicGroupFallbackColor,
+)
 
 const isMapped = computed(() => Boolean(props.topic))
 </script>

@@ -59,6 +59,33 @@ const sourceRows = computed(() =>
   })),
 )
 
+/**
+ * 范围提示由接口数据拼出，不写死数字：覆盖范围变了（例如纳入更多年份或补上 ECCV 2026）
+ * 提示会跟着变，避免出现「数据早就换了、说明还写抽样 200 篇」这种过期文案。
+ */
+const scopeNotice = computed(() => {
+  const summary = coverageSummary.value
+  if (!summary) return ''
+  const parts: string[] = [
+    `本平台覆盖 ${summary.years}（${summary.combos} 个会议年份、${summary.records} 篇）：`,
+  ]
+  if (summary.fullYears) {
+    parts.push(
+      `其中 ${summary.fullYears} 个年份是 2020 年及以后的完整论文集（该届全部录用论文），`,
+    )
+  }
+  if (summary.sampledYears) {
+    parts.push(
+      `另有 ${summary.sampledYears} 个年份为抽样（每组合最多 ${summary.sampleLimit} 篇），`,
+    )
+  }
+  parts.push(
+    '2020 年之前未采集；论文文本只有题目与摘要。' +
+      '这里的榜单、图谱与曲线描述的是这个范围，不构成对整个领域研究现状的结论。',
+  )
+  return parts.join('')
+})
+
 const coverageSummary = computed(() => {
   const data = coverage.value
   if (!data) return null
@@ -226,9 +253,8 @@ const dataSources = [
         </div>
       </div>
       <DemoNotice class="about-notice" tone="warn">
-        本平台的数据是<strong>抽样样本</strong>：三个会议、有限年份、每会议年份最多
-        {{ coverageSummary?.sampleLimit ?? 200 }} 篇，论文文本只含题目与摘要。
-        这里的榜单、图谱与曲线都只描述这个样本，不构成对整个领域研究现状的结论。
+        <template v-if="scopeNotice">{{ scopeNotice }}</template>
+        <template v-else>数据范围正在加载，加载完成后这里会说明本次分析覆盖的会议年份与论文数。</template>
       </DemoNotice>
     </section>
 
@@ -503,7 +529,8 @@ const dataSources = [
     <section class="card about-section is-last">
       <h2 class="section-title">样本趋势不等于整个领域的完整结论</h2>
       <p class="section-text">
-        这里看到的一切都来自一个有限样本：三个会议、有限年份、以题目与摘要为主的文本字段。会议录用结构本身在变化，
+        这里看到的一切都来自一个有限范围：三个会议、2020 年及以后（CVPR 每年，ICCV 奇数年、ECCV 偶数年），
+        文本只含题目与摘要。会议录用结构本身在变化，
         关键词抽取也会漏掉用不同措辞表达的同类工作，因此某个方向在某条曲线上的升降，只能说明「在这个样本里它出现得多或少了」，
         不能直接推导出整个计算机视觉领域的研究结论。如果要据此选择研究方向，建议把这里当作线索的起点：
         挑出 2—3 个方向，再去读会议论文原文与综述做交叉验证。

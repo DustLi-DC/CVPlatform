@@ -560,6 +560,7 @@ onMounted(() => {
                     :name="keyword.name"
                     :origin="keyword.origin"
                     :topic="keyword.topic"
+                    :topic-group="keyword.topic_group"
                     @click="onKeywordClick(keyword.name)"
                   />
                 </template>
