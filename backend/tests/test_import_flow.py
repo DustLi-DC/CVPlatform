@@ -225,6 +225,15 @@ def _stub_sources(
         )
 
     monkeypatch.setattr("app.services.sources.cvf.fetch_paper", fake_fetch_paper)
+
+    # 未命中索引时的联网兜底也要替身化：否则「库里与索引里都没有」的标题会打到真实
+    # OpenAlex，一旦对方限流（实测返回 429）失败原因就变成「openalex 返回 HTTP 429」，
+    # 用例随机失败且依赖网络。这里固定为「检索不到任何候选」。
+    # 注意 collect 模块是 `from ... import search_by_title`，替换的是它自己的引用。
+    monkeypatch.setattr(
+        "app.services.collector.search_by_title",
+        lambda *args, **kwargs: [],
+    )
     return cache
 
 
