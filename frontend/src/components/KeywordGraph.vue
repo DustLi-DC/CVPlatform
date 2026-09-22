@@ -2,9 +2,14 @@
 /**
  * 关键词关系图谱（ECharts graph + force 布局），按原型规范渲染：
  *
- * - 节点大小 `14 + √count × 1.8`，`count = 0` 时固定 10（与原型一致）；
- * - 节点颜色按主题分组，未分组用中性色；
- * - 边宽 `1 + 共现论文数 / 40`；只画两端都在节点集合内的边（由接口保证）；
+ * - **节点大小按当前数据范围归一**：`14 + 22 × √(count / 最大count)`（14–36 px），
+ *   `count = 0` 时固定 10。原型用的是绝对公式 `14 + √count × 1.8`，那在 1,200 篇样本上
+ *   直径约 10–46 px 是合适的；但语料扩到 2.9 万篇后最大 count 达 7,546，
+ *   绝对公式会给出 170 px 的圆，四十个这样的圆无法布局、标签全部互相覆盖。
+ *   归一化保留了「越大表示相关论文越多」的编码方向，具体篇数在提示框与侧栏给出。
+ * - 边宽同样按范围归一：`1 + 5 × √(共现论文数 / 最大权重)`（1–6 px），原因同上
+ *   （原型公式 `1 + 权重 / 40` 在最大权重 1,942 时会画出 49 px 的边，图形完全糊掉）；
+ * - 节点颜色按主题分组，未分组用中性色；只画两端都在节点集合内的边（由接口保证）；
  * - 力导向布局、允许拖拽与缩放漫游，标签自动避让（labelLayout.hideOverlap）；
  * - 节点上限与最小共现由调用方传入，展示范围在调用方的图例处标注。
  *
@@ -42,15 +47,17 @@ const container = ref<HTMLDivElement | null>(null)
 const chart = shallowRef<echarts.ECharts | null>(null)
 let resizeObserver: ResizeObserver | null = null
 
-/** 节点半径：与原型同一公式，避免图形语义与原型不一致 */
-function nodeSize(count: number): number {
+/** 节点直径：按当前范围的最大值归一，保持「越大越热」的语义同时保证可读 */
+function nodeSize(count: number, maxCount: number): number {
   if (count <= 0) return 10
-  return 14 + Math.sqrt(count) * 1.8
+  const ratio = maxCount > 0 ? count / maxCount : 1
+  return 14 + 22 * Math.sqrt(Math.max(0, Math.min(1, ratio)))
 }
 
-/** 边宽：与原型同一公式（1 + 共现论文数 / 40） */
-function edgeWidth(weight: number): number {
-  return 1 + weight / 40
+/** 边宽：同样按最大权重归一（1–6 px） */
+function edgeWidth(weight: number, maxWeight: number): number {
+  const ratio = maxWeight > 0 ? weight / maxWeight : 1
+  return 1 + 5 * Math.sqrt(Math.max(0, Math.min(1, ratio)))
 }
 
 function colorFor(group: string | null): string {
@@ -64,6 +71,9 @@ type ChartOption = ComposeOption<GraphSeriesOption | TooltipComponentOption>
 function buildOption(): ChartOption {
   // 只画两端都在节点集合内的边：接口已按节点上限过滤，这里再兜一次底
   const nodeNames = new Set(props.nodes.map((node) => node.key))
+  // 归一化的分母：节点按最大关联论文数、边按最大共现论文数
+  const maxCount = Math.max(...props.nodes.map((node) => node.count), 1)
+  const maxWeight = Math.max(...props.edges.map((edge) => edge.weight), 1)
 
   return {
     tooltip: {
@@ -74,8 +84,16 @@ function buildOption(): ChartOption {
           const data = item.data as { source_name?: string; target_name?: string; weight?: number }
           return `${data.source_name} — ${data.target_name}<br/>共现论文数：${data.weight} 篇`
         }
-        const data = item.data as { name?: string; count?: number; group_label?: string }
-        return `${data.name}<br/>相关论文：${data.count} 篇<br/>分组：${data.group_label ?? '未分组'}`
+        const data = item.data as {
+          name?: string
+          display_name?: string
+          count?: number
+          group_label?: string
+        }
+        // 提示框显示中文主题名（name 是查询用的 slug，展示对读者没有意义）
+        return `${data.display_name ?? data.name}<br/>相关论文：${data.count} 篇<br/>分组：${
+          data.group_label ?? '未分组'
+        }`
       },
     },
     animationDuration: 600,
@@ -92,10 +110,12 @@ function buildOption(): ChartOption {
           // 就会停在初始的紧凑状态；一次性布局在任何情况下都是同一张可读的图。
           initLayout: 'circular',
           layoutAnimation: false,
-          repulsion: 420,
-          edgeLength: [90, 220],
-          gravity: 0.05,
-          friction: 0.5,
+          // 斥力与边长按节点尺寸量级设定：40 个节点、直径最大 36 px，
+          // 需要更大的分离距离才能让标签放得下（实测 1600 时中心仍偏挤）
+          repulsion: 3000,
+          edgeLength: [110, 260],
+          gravity: 0.03,
+          friction: 0.7,
         },
         label: {
           show: true,
@@ -104,14 +124,15 @@ function buildOption(): ChartOption {
           color: '#334155',
           formatter: '{b}',
         },
-        labelLayout: { hideOverlap: true },
+        // 先尝试纵向错位，实在放不下才隐藏：40 个节点的图里直接隐藏会丢掉太多标签
+        labelLayout: { moveOverlap: 'shiftY', hideOverlap: true },
         lineStyle: { color: '#cbd5e1', curveness: 0.08, opacity: 0.9 },
         emphasis: { focus: 'adjacency', lineStyle: { width: 3 } },
         data: props.nodes.map((node) => ({
           name: node.key,
           // 名称另存：key 是查询用标识，标签与提示显示 name
           value: node.count,
-          symbolSize: nodeSize(node.count),
+          symbolSize: nodeSize(node.count, maxCount),
           itemStyle: { color: colorFor(node.group) },
           count: node.count,
           group_label: node.group,
@@ -126,7 +147,7 @@ function buildOption(): ChartOption {
             weight: edge.weight,
             source_name: edge.source_name,
             target_name: edge.target_name,
-            lineStyle: { width: edgeWidth(edge.weight) },
+            lineStyle: { width: edgeWidth(edge.weight, maxWeight) },
           })),
       },
     ],
