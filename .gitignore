@@ -174,3 +174,10 @@ Desktop.ini
 # Local coding-assistant settings and development prompts
 /.codex/
 /代码模型分步开发提示词.md
+
+# Local blog drafts and supporting media
+/博客材料/
+
+# Local stage working documents (kept out of the repository by design)
+/实施基线.md
+/开发设计与验收.md
