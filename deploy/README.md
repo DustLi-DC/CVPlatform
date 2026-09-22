@@ -268,19 +268,32 @@ pip 以 cvplatform 身份装不进 root 属主的 venv（改为按 venv 属主�
 其余非 API 路径回退 `index.html`（Vue Router history 模式刷新不掉 404），
 而 `/api/**`、`/docs`、`/openapi.json` **仍走框架自身路由与 JSON 404 语义**——接口打错路径不会拿到 HTML。
 
-步骤：
+**全新机器 + 端口 80**：端口 80 属特权端口，非 root 绑定需要额外授权；全新机器也可能没有
+Python。用引导脚本一条命令处理这两种情况（它先探测环境，再选可行路径）：
 
 ```bash
-# 开发机：打包并上传（发布包在 data/release/ 下）
+# 开发机：打包并上传
 bash deploy/make_release.sh 1.0.0 --with-db
 scp data/release/cvplatform-release-1.0.0.tar.gz WORK2@65.52.167.95:/tmp/
 
-# 服务器：解包并安装（自动化程度最高的一步：建目录 → 建 venv → 装依赖 → 部署代码与前端
-#         → 放置数据库快照 → 写 env.sh → 启动 → 自检）
+# 服务器：解包后跑引导脚本
 cd ~ && tar -xzf /tmp/cvplatform-release-1.0.0.tar.gz
-bash ~/cvplatform-release-1.0.0/deploy/user/install.sh ~/cvplatform-release-1.0.0 --port 8000
+bash ~/cvplatform-release-1.0.0/deploy/user/bootstrap.sh ~/cvplatform-release-1.0.0 --port 80
+```
 
-# 日常操作
+引导脚本按可用权限自动选择绑 80 的方式：
+
+| 机器条件 | 采取的做法 |
+|---|---|
+| 有免密 sudo + systemd | 生成 `cvplatform.service`（`User=<登录用户>` + `AmbientCapabilities=CAP_NET_BIND_SERVICE`）并启动，由 systemd 授权绑 80 |
+| 有 sudo 但需密码、无 systemd | 打印一条 `sudo setcap 'cap_net_bind_service=+ep' <venv>/bin/python3*`，执行后普通用户即可绑 80 |
+| 没有 sudo | 无法绑 80，自动退回高位端口并给出 SSH 端口转发命令（`ssh -L 8080:127.0.0.1:8000 …`） |
+| 没有 Python | 有 sudo 就用 apt 装 `python3 python3-venv python3-pip`；否则给出 conda/管理员安装的替代方案 |
+
+只想装应用、不需要特权端口时，直接用 `install.sh`（不再需要 sudo）：
+
+```bash
+bash ~/cvplatform-release-1.0.0/deploy/user/install.sh ~/cvplatform-release-1.0.0 --port 8000
 bash ~/cvplatform/deploy/user/ctl.sh status|logs|restart|stop
 ```
 

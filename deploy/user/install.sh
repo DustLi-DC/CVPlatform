@@ -51,10 +51,15 @@ fail() { echo "!! $*" >&2; exit 1; }
 
 log "1/6 检查 Python"
 PY=""
-for candidate in python3.12 python3.11 python3 python; do
-  if command -v "$candidate" >/dev/null 2>&1; then PY="$(command -v "$candidate")"; break; fi
-done
-[[ -n "$PY" ]] || fail "找不到 Python（需要 3.11+，项目按 3.12 开发）。若只有 conda，请把 python 路径写进 CVPLATFORM_PYTHON 后重试"
+if [[ -n "${CVPLATFORM_PYTHON:-}" ]]; then
+  # 允许显式指定解释器（例如机器上只有 conda 环境）
+  PY="$CVPLATFORM_PYTHON"
+else
+  for candidate in python3.12 python3.11 python3 python; do
+    if command -v "$candidate" >/dev/null 2>&1; then PY="$(command -v "$candidate")"; break; fi
+  done
+fi
+[[ -n "$PY" ]] || fail "找不到 Python（需要 3.11+）。若只有 conda，请用 CVPLATFORM_PYTHON=\$HOME/miniconda3/bin/python 重试"
 "$PY" - <<'PYEOF' || fail "Python 版本过低：需要 3.11+（项目使用 datetime.UTC 等 3.11 起可用的特性）"
 import sys
 raise SystemExit(0 if sys.version_info >= (3, 11) else 1)
@@ -126,6 +131,17 @@ curl -s -o /dev/null -w "    /            → %{http_code}\n" "http://127.0.0.1:
 curl -s -o /dev/null -w "    /trends      → %{http_code}\n" "http://127.0.0.1:$PORT/trends"
 curl -s -o /dev/null -w "    /api/health  → %{http_code}\n" "http://127.0.0.1:$PORT/api/health"
 curl -s "http://127.0.0.1:$PORT/api/stats/coverage" | head -c 200; echo
+
+if [[ "$PORT" -lt 1024 ]]; then
+  cat <<EOF
+
+注意：端口 $PORT 是特权端口（<1024）。若上面的自检里 / 或 /api/health 不是 200，
+说明当前用户无权绑定（日志会显示 Permission denied）。两种解法：
+  a) 用 deploy/user/bootstrap.sh 重跑一次，它会按可用权限生成带
+     AmbientCapabilities=CAP_NET_BIND_SERVICE 的 systemd 单元，或给出 setcap 命令；
+  b) 换高位端口（如 8000）并用 SSH 端口转发访问。
+EOF
+fi
 
 cat <<EOF
 
