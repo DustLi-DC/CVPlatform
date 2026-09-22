@@ -125,8 +125,10 @@ log "4/7 安装/更新后端依赖（生产只装 requirements.txt，不装 requ
 if [[ $SKIP_DEPS -eq 1 ]]; then
   echo "  按 --skip-deps 跳过"
 else
-  run "sudo -u cvplatform $APP_DIR/.venv/bin/pip install --upgrade pip >/dev/null"
-  run "sudo -u cvplatform $APP_DIR/.venv/bin/pip install -r '$APP_DIR/requirements.txt'"
+  # -H 让 sudo 切到目标用户的家目录，并把 pip 缓存指到临时目录：
+  # 否则会警告「.cache/pip 不可写」（无害但干扰阅读），且不会污染应用目录
+  run "sudo -H -u cvplatform env PIP_CACHE_DIR=/tmp/cvplatform-pip-cache       $APP_DIR/.venv/bin/pip install --upgrade pip >/dev/null"
+  run "sudo -H -u cvplatform env PIP_CACHE_DIR=/tmp/cvplatform-pip-cache       $APP_DIR/.venv/bin/pip install -r '$APP_DIR/requirements.txt'"
 fi
 
 log "5/7 数据库：迁移与应用发布包数据（可选）"
