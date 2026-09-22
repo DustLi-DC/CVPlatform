@@ -24,7 +24,8 @@ const router = createRouter({
       path: '/',
       name: 'home',
       component: HomeView,
-      meta: { title: '热门方向总览', dataSource: 'demo' satisfies DataSourceKind },
+      // 阶段 8 起总览接入 /api/stats/{summary,top,graph}，数值全部来自数据库
+      meta: { title: '热门方向总览', dataSource: 'api' satisfies DataSourceKind },
     },
     {
       path: '/trends',

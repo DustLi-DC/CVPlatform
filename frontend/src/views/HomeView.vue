@@ -2,207 +2,344 @@
 /**
  * 页面 1 · 热门方向总览（对应原型 01_home）。
  *
- * 本阶段所有数值来自 src/demo 下的演示数据，页面已标注演示来源；统计接口在阶段 8
- * 接入后替换数据来源，页面结构与交互保持不变。
+ * 数据来源：`GET /api/stats/{summary,top,graph}`（阶段 8 接入，页面数值全部来自数据库，
+ * 不再使用演示数据）。统计口径固定为「分析集合去重论文数」：
+ *
+ * - 分母只含「会议年份有效、标题可用、关键词已按当前规则版本处理完成」的论文，
+ *   处理成功但关键词为空仍计入；待处理/失败/旧版本单列在 excluded 中，页面必须显示；
+ * - 「未归类」不参与榜单排序（它恒等于分母），但数量与占比在图例处说明；
+ * - 缺失与零严格区分：没有样本显示「—」，有样本但计数为 0 显示 0。
  */
-import { computed, ref, watch } from 'vue'
+import { computed, defineAsyncComponent, onMounted, ref, watch } from 'vue'
 import { RouterLink, useRoute, useRouter } from 'vue-router'
 
 import ChartContainer from '../components/ChartContainer.vue'
 import ConferenceChips from '../components/ConferenceChips.vue'
-import DemoNotice from '../components/DemoNotice.vue'
 import PageHeader from '../components/PageHeader.vue'
 import PaperDrawer from '../components/PaperDrawer.vue'
 import RankBarList, { type RankItem } from '../components/RankBarList.vue'
 import StatCard from '../components/StatCard.vue'
 import YearRangeSelect from '../components/YearRangeSelect.vue'
-import { DEMO_SUFFIX, demoCoverage, demoYearFirst, demoYearLast, demoYears } from '../demo/coverage'
-import { demoDrawerPapers } from '../demo/papers'
+import { fetchGraph, fetchSummary, fetchTop } from '../api/statsApi'
+import { ApiError, listPapers } from '../api/paperApi'
+import type { PaperListItem } from '../types/paper'
+import { allConferences, type Conference } from '../types/paper'
 import {
-  demoConferenceYearSample,
-  demoGraphEdges,
-  demoTopicCount,
-  demoTrendTopics,
-  findDemoTopic,
-  topicGroupColors,
-  topicGroupLabels,
-} from '../demo/topics'
-import { conferenceColors, type Conference } from '../types/paper'
+  formatShare,
+  groupColor,
+  groupLabel,
+  legendForGroups,
+  type GraphEdge,
+  type GraphNode,
+  type StatsGraph,
+  type StatsSummary,
+  type StatsTop,
+} from '../types/stats'
+
+// 图谱依赖 ECharts（约 200 kB gzip）：按需异步加载，使论文管理、采集等页面
+// 的首屏不携带图表库；加载期间由 ChartContainer 的占位内容兜住布局
+const KeywordGraph = defineAsyncComponent(() => import('../components/KeywordGraph.vue'))
 
 const route = useRoute()
 const router = useRouter()
 
-const conferences = ref<Conference[]>(['CVPR', 'ICCV', 'ECCV'])
-const yearFrom = ref<number>(demoYearFirst)
-const yearTo = ref<number>(demoYearLast)
-const activeTopic = ref('')
+/** 图谱节点规模控制：默认 40 个节点、最小共现 2 篇（与设计文档一致） */
+const NODE_LIMITS = [20, 40, 60, 100]
+const MIN_EDGES = [1, 2, 3, 5]
 
-const activeYears = computed(() =>
-  demoYears.filter((year) => year >= yearFrom.value && year <= yearTo.value),
-)
+const conferences = ref<Conference[]>([...allConferences])
+const yearFrom = ref<number | null>(null)
+const yearTo = ref<number | null>(null)
+const nodeLimit = ref(40)
+const minEdge = ref(2)
 
-const yearRangeLabel = computed(() => `${yearFrom.value}—${yearTo.value}`)
+const summary = ref<StatsSummary | null>(null)
+const top = ref<StatsTop | null>(null)
+const graph = ref<StatsGraph | null>(null)
 
-const sampleTotal = computed(() =>
-  conferences.value.reduce(
-    (sum, conference) =>
-      sum +
-      activeYears.value.reduce(
-        (inner, year) => inner + (demoConferenceYearSample(conference, year) ?? 0),
-        0,
-      ),
-    0,
-  ),
-)
+const loading = ref(true)
+const loadError = ref('')
+const loadErrorRetryable = ref(true)
 
-interface TopicRow {
-  name: string
-  group: keyof typeof topicGroupColors
-  count: number
-}
+/** 抽屉：当前查看的主题（key 为统计标识，name 为展示名） */
+const activeKey = ref('')
+const activeName = ref('')
+const drawerPapers = ref<PaperListItem[]>([])
+const drawerPapersLoading = ref(false)
+const drawerPapersError = ref('')
 
-const topicRows = computed<TopicRow[]>(() =>
-  demoTrendTopics
-    .map((topic) => ({
-      name: topic.name,
-      group: topic.group,
-      count: conferences.value.reduce(
-        (sum, conference) =>
-          sum +
-          activeYears.value.reduce(
-            (inner, year) => inner + (demoTopicCount(topic, conference, year) ?? 0),
-            0,
-          ),
-        0,
-      ),
-    }))
-    .sort((a, b) => b.count - a.count),
-)
+/** 请求序号：快速切换筛选时，旧响应不得覆盖新结果 */
+let requestToken = 0
+
+const availableYears = computed<number[]>(() => summary.value?.years ?? [])
+
+/** 数据更新时间：后端给的是 UTC ISO 串，这里只做可读化展示，不改数值 */
+const updatedAtText = computed(() => {
+  const raw = summary.value?.data_updated_at
+  if (!raw) return '暂无同步记录'
+  const parsed = new Date(raw)
+  if (Number.isNaN(parsed.getTime())) return raw
+  const pad = (value: number) => String(value).padStart(2, '0')
+  return `${parsed.getFullYear()}-${pad(parsed.getMonth() + 1)}-${pad(parsed.getDate())} ${pad(parsed.getHours())}:${pad(parsed.getMinutes())}`
+})
+const hasData = computed(() => summary.value?.has_data ?? false)
 
 const rankItems = computed<RankItem[]>(() =>
-  topicRows.value
-    .filter((row) => row.count > 0)
-    .slice(0, 10)
-    .map((row) => ({
-      key: row.name,
-      label: row.name,
-      count: row.count,
-      color: topicGroupColors[row.group],
-      active: row.name === activeTopic.value,
-    })),
-)
-
-/**
- * 范围最热方向。计数为 0 时视为「没有可用样本」而非「最热方向是 0 篇」——
- * 与统计口径一致：分母为 0 或数据缺失时应显示缺失状态，不写成 0。
- */
-const hottestTopic = computed(() => {
-  const first = topicRows.value[0]
-  return first && first.count > 0 ? first : null
-})
-
-/** 所选会议在年份区间内完全没有数据的提示（对应原型的灰色缺口说明） */
-const missingConferences = computed(() =>
-  conferences.value.filter(
-    (conference) =>
-      !activeYears.value.some(
-        (year) => typeof demoConferenceYearSample(conference, year) === 'number',
-      ),
-  ),
-)
-
-const scopeText = computed(() => {
-  const conferenceLabel = conferences.value.length ? conferences.value.join(' · ') : '未选择会议'
-  return { conferenceLabel, rangeLabel: yearRangeLabel.value }
-})
-
-const graphLegend = computed(() =>
-  (Object.keys(topicGroupLabels) as (keyof typeof topicGroupLabels)[]).map((group) => ({
-    label: topicGroupLabels[group],
-    color: topicGroupColors[group],
-    shape: 'dot' as const,
+  (top.value?.items ?? []).map((item) => ({
+    key: item.key,
+    label: item.name,
+    count: item.count,
+    color: groupColor(item.group),
+    active: item.key === activeKey.value,
   })),
 )
 
-const activeTopicCount = computed(() => {
-  const topic = findDemoTopic(activeTopic.value)
-  if (!topic) return 0
-  return conferences.value.reduce(
-    (sum, conference) =>
-      sum +
-      activeYears.value.reduce(
-        (inner, year) => inner + (demoTopicCount(topic, conference, year) ?? 0),
-        0,
-      ),
-    0,
-  )
+const scopeText = computed(() => ({
+  conferenceLabel: conferences.value.length ? conferences.value.join(' · ') : '未选择会议',
+  rangeLabel:
+    yearFrom.value === null && yearTo.value === null
+      ? '全部年份'
+      : `${yearFrom.value ?? '最早'}—${yearTo.value ?? '最新'}`,
+}))
+
+/** 被排除在分母之外的论文数：必须在页面上如实单列 */
+const excludedNote = computed(() => {
+  const excluded = summary.value?.excluded
+  if (!excluded) return ''
+  const parts: string[] = []
+  if (excluded.pending) parts.push(`${excluded.pending} 篇待处理`)
+  if (excluded.failed) parts.push(`${excluded.failed} 篇关键词处理失败`)
+  if (excluded.stale) parts.push(`${excluded.stale} 篇待重算（规则版本已更新）`)
+  if (excluded.invalid_title) parts.push(`${excluded.invalid_title} 篇标题不可用`)
+  return parts.length ? `另有 ${parts.join('、')}，未计入分母。` : ''
 })
 
-const activeTopicShare = computed(() => {
-  if (sampleTotal.value === 0) return null
-  return (activeTopicCount.value / sampleTotal.value) * 100
+/** 覆盖说明：样本性质、未覆盖的目标组合，以及未归类关键词的规模 */
+const coverageNote = computed(() => {
+  const coverage = summary.value?.coverage
+  if (!coverage) return ''
+  const parts: string[] = []
+  if (coverage.sampled && coverage.sample_limit_per_conference_year) {
+    parts.push(
+      `本平台按抽样采集：每个会议年份最多 ${coverage.sample_limit_per_conference_year} 篇，` +
+        '占比反映的是样本内的相对热度，不等同于整届大会的录用比例。',
+    )
+  }
+  if (coverage.missing_conference_years.length) {
+    const missing = coverage.missing_conference_years
+      .map((item) => `${item.conference} ${item.year}`)
+      .join('、')
+    parts.push(`以下目标会议年份尚未采集到数据：${missing}。`)
+  }
+  const unmapped = summary.value?.unmapped
+  if (unmapped?.applies) {
+    parts.push(
+      `还有 ${unmapped.keyword_total} 个关键词未归入任何主题（涉及 ${unmapped.paper_count} 篇论文），` +
+        '它们不计入下面的主题榜单，但已如实保留在关键词中。',
+    )
+  }
+  return parts.join('')
+})
+
+const graphLegend = computed(() => legendForGroups((graph.value?.nodes ?? []).map((n) => n.group)))
+
+const graphRangeNote = computed(() => {
+  const data = graph.value
+  if (!data) return ''
+  const parts = [
+    `当前展示 ${data.nodes.length} / ${data.node_total} 个主题节点`,
+    `连线仅保留共现论文数 ≥ ${data.min_edge} 的 ${data.edges.length} 条`,
+  ]
+  if (data.truncated) {
+    parts.push('节点已按相关论文数截断，可在上方调整节点上限')
+  }
+  return parts.join('；') + '。'
+})
+
+const graphNodes = computed<GraphNode[]>(() => graph.value?.nodes ?? [])
+const graphEdges = computed<GraphEdge[]>(() => graph.value?.edges ?? [])
+
+const activeCount = computed(() => {
+  const item = top.value?.items.find((entry) => entry.key === activeKey.value)
+  if (item) return item.count
+  const node = graph.value?.nodes.find((entry) => entry.key === activeKey.value)
+  return node?.count ?? 0
+})
+
+const activeShare = computed(() => {
+  const denominator = top.value?.denominator ?? summary.value?.denominator ?? 0
+  if (denominator <= 0) return null
+  return (activeCount.value / denominator) * 100
 })
 
 const drawerCoTopics = computed(() => {
-  if (!activeTopic.value) return []
-  return demoGraphEdges
-    .filter((edge) => edge.source === activeTopic.value || edge.target === activeTopic.value)
+  if (!activeKey.value) return []
+  return (graph.value?.edges ?? [])
+    .filter((edge) => edge.source === activeKey.value || edge.target === activeKey.value)
     .map((edge) => ({
-      name: edge.source === activeTopic.value ? edge.target : edge.source,
+      name: edge.source === activeKey.value ? edge.target_name : edge.source_name,
       weight: edge.weight,
     }))
     .sort((a, b) => b.weight - a.weight)
     .slice(0, 4)
 })
 
-const drawerPapers = computed(() => {
-  if (!activeTopic.value) return []
-  // 演示数据里按主题归属挑示例论文；阶段 8 起改用统计接口返回的真实关联论文
-  return demoDrawerPapers.filter((paper) => paper.topics.includes(activeTopic.value)).slice(0, 3)
+const drawerQuery = computed(() => {
+  const query: Record<string, string> = { from_stats: 'true' }
+  if (activeKey.value) query.topic = activeKey.value
+  if (activeName.value) query.topic_name = activeName.value
+  if (conferences.value.length) query.conf = conferences.value.join(',')
+  if (yearFrom.value !== null) query.year_from = String(yearFrom.value)
+  if (yearTo.value !== null) query.year_to = String(yearTo.value)
+  return query
 })
 
-const drawerQuery = computed(() => ({
-  kw: activeTopic.value,
-  conf: conferences.value.join(','),
-  year_from: String(yearFrom.value),
-  year_to: String(yearTo.value),
-}))
+const trendEntry = computed(() => {
+  const hottest = summary.value?.hottest
+  if (!hottest) return null
+  return { name: hottest.name, count: hottest.count, share: hottest.share }
+})
 
-const trendEntryTopics = computed(() =>
-  demoTrendTopics.slice(0, 3).map((topic, index) => ({
-    name: topic.name,
-    conference: (['CVPR', 'ICCV', 'ECCV'] as Conference[])[index] ?? 'CVPR',
-    hint:
-      ['2022—2025 全部年份可用', '注：ICCV 仅奇数年有数据', '2023 年起才零散出现'][index] ?? '',
-  })),
-)
-
-function resetFilters(): void {
-  conferences.value = ['CVPR', 'ICCV', 'ECCV']
-  yearFrom.value = demoYearFirst
-  yearTo.value = demoYearLast
+function currentScope() {
+  return {
+    conferences: [...conferences.value],
+    yearFrom: yearFrom.value,
+    yearTo: yearTo.value,
+  }
 }
 
-function openTopicDrawer(name: string): void {
-  activeTopic.value = name
-  void router.replace({ query: { ...route.query, kw: name } })
+async function load(): Promise<void> {
+  const token = ++requestToken
+  loading.value = true
+  loadError.value = ''
+  try {
+    const scope = currentScope()
+    // 三个请求并发；任一失败即视为本页加载失败，避免出现半真半假的统计
+    const [summaryData, topData, graphData] = await Promise.all([
+      fetchSummary(scope),
+      fetchTop(scope, { limit: 10 }),
+      fetchGraph(scope, { limit: nodeLimit.value, minEdge: minEdge.value }),
+    ])
+    if (token !== requestToken) return // 已有更新的筛选请求，丢弃本次结果
+    summary.value = summaryData
+    top.value = topData
+    graph.value = graphData
+    // 年份区间默认对齐数据的实际跨度（首次加载或数据变化后）。
+    // years 缺失时（例如后端版本较旧）不阻塞统计展示，只是不自动填充区间。
+    const years = summaryData.years ?? []
+    if (yearFrom.value === null && yearTo.value === null && years.length) {
+      yearFrom.value = years[0] ?? null
+      yearTo.value = years[years.length - 1] ?? null
+    }
+  } catch (error) {
+    if (token !== requestToken) return
+    summary.value = null
+    top.value = null
+    graph.value = null
+    if (error instanceof ApiError) {
+      loadError.value = error.message
+      loadErrorRetryable.value = error.isRetryable
+    } else {
+      // 非接口错误（例如渲染期异常）在界面上给通用文案，同时打到控制台便于排查
+      console.error('加载统计数据失败：', error)
+      loadError.value = '加载统计数据失败，请稍后重试。'
+      loadErrorRetryable.value = true
+    }
+  } finally {
+    if (token === requestToken) loading.value = false
+  }
+}
+
+/** 抽屉里的示例论文：复用论文列表接口，并带上与统计一致的口径约束 */
+async function loadDrawerPapers(): Promise<void> {
+  if (!activeKey.value) return
+  drawerPapersLoading.value = true
+  drawerPapersError.value = ''
+  try {
+    const page = await listPapers({
+      q: '',
+      match: 'fuzzy',
+      conferences: [...conferences.value],
+      yearFrom: yearFrom.value,
+      yearTo: yearTo.value,
+      keyword: '',
+      topic: activeKey.value,
+      dataStatus: '',
+      keywordStatus: '',
+      fromStats: true,
+      sort: 'year',
+      order: 'desc',
+      page: 1,
+      pageSize: 3,
+    })
+    drawerPapers.value = page.items
+  } catch (error) {
+    drawerPapers.value = []
+    drawerPapersError.value =
+      error instanceof ApiError ? error.message : '加载相关论文失败，请稍后重试。'
+  } finally {
+    drawerPapersLoading.value = false
+  }
+}
+
+function resetFilters(): void {
+  conferences.value = [...allConferences]
+  yearFrom.value = summary.value?.years[0] ?? null
+  yearTo.value = summary.value?.years[summary.value.years.length - 1] ?? null
+  nodeLimit.value = 40
+  minEdge.value = 2
+}
+
+function openTopicDrawer(item: { key: string; name: string }): void {
+  activeKey.value = item.key
+  activeName.value = item.name
+  void router.replace({ query: { ...route.query, kw: item.key } })
+  void loadDrawerPapers()
 }
 
 function closeDrawer(): void {
-  activeTopic.value = ''
+  activeKey.value = ''
+  activeName.value = ''
+  drawerPapers.value = []
   const query = { ...route.query }
   delete query.kw
   void router.replace({ query })
 }
 
-// 支持从趋势页或列表页以 ?kw= 直接带入主题，与原型一致
+/** 依据统计返回的榜单/图谱解析 ?kw=（支持 slug 或主题名，两者都能打开抽屉） */
+function applyRouteKeyword(value: unknown): void {
+  if (typeof value !== 'string' || !value) {
+    if (activeKey.value) closeDrawer()
+    return
+  }
+  const fromTop = top.value?.items.find(
+    (item) => item.key === value || item.name === value,
+  )
+  const fromGraph = graph.value?.nodes.find(
+    (node) => node.key === value || node.name === value,
+  )
+  const found = fromTop ?? fromGraph
+  if (found) {
+    openTopicDrawer(found)
+  }
+}
+
+// 筛选变化即重新加载（年份与会议）；图谱规模变化只重取图谱，避免整页闪烁
+watch([conferences, yearFrom, yearTo], () => {
+  void load()
+})
+watch([nodeLimit, minEdge], () => {
+  void load()
+})
 watch(
   () => route.query.kw,
-  (value) => {
-    if (typeof value === 'string' && findDemoTopic(value)) activeTopic.value = value
-  },
-  { immediate: true },
+  (value) => applyRouteKeyword(value),
 )
+
+onMounted(async () => {
+  await load()
+  applyRouteKeyword(route.query.kw)
+})
 </script>
 
 <template>
@@ -211,52 +348,88 @@ watch(
       variant="hero"
       eyebrow="页面 1 / 热门方向总览"
       title="计算机视觉顶会热词分析"
-      description="面向刚接触计算机视觉的同学：把 CVPR、ICCV、ECCV 近几年的论文题目与摘要放在一起统计，先看清哪些方向在被反复研究，再顺着热词找到值得读的论文。"
-      notice="本页榜单、图谱与所有数值均为课程演示数据，不代表已核验的研究结论。"
+      description="面向刚接触计算机视觉的同学：把 CVPR、ICCV、ECCV 近几年已采集的论文题目与摘要放在一起统计，先看清哪些方向在被反复研究，再顺着热词找到值得读的论文。"
+      :notice="
+        summary?.coverage.sampled
+          ? '本页为抽样样本统计（每会议年份约 ' +
+            (summary?.coverage.sample_limit_per_conference_year ?? 0) +
+            ' 篇），占比表示样本内的相对热度，不代表整届大会的录用比例。'
+          : ''
+      "
       :stats="[
-        { label: '纳入论文样本', value: sampleTotal.toLocaleString('zh-CN'), hint: '篇（演示）' },
-        { label: '覆盖会议年份', value: String(demoCoverage.length), hint: '个组合' },
+        {
+          label: '纳入论文样本',
+          value: summary ? summary.total_sample.toLocaleString('zh-CN') : '—',
+          hint: '篇（含待处理，分母见下）',
+        },
+        {
+          label: '覆盖会议年份',
+          value: summary ? String(summary.coverage.conference_years) : '—',
+          hint: '个组合',
+        },
       ]"
     />
 
     <section class="card filter-card">
       <div class="filter-row">
         <ConferenceChips v-model="conferences" />
-        <YearRangeSelect v-model:year-from="yearFrom" v-model:year-to="yearTo" :years="demoYears" />
+        <YearRangeSelect
+          v-model:year-from="yearFrom"
+          v-model:year-to="yearTo"
+          :years="availableYears"
+        />
         <div class="filter-scope">
           <span class="field-label">当前统计范围</span>
           <p class="scope-text">
             <strong>{{ scopeText.conferenceLabel }}</strong>
-            ｜ {{ scopeText.rangeLabel }} 年 ｜ 纳入论文样本
-            <strong class="scope-strong">{{ sampleTotal.toLocaleString('zh-CN') }}</strong>
-            篇（演示数据）
+            ｜ {{ scopeText.rangeLabel }} ｜ 纳入分析分母
+            <strong class="scope-strong">{{ summary ? summary.denominator : '—' }}</strong>
+            篇
+            <span v-if="loading" class="scope-loading">· 正在加载…</span>
           </p>
         </div>
         <button type="button" class="btn btn-secondary" @click="resetFilters">重置筛选</button>
       </div>
 
-      <DemoNotice v-if="missingConferences.length" class="filter-notice" tone="warn">
-        {{ missingConferences.join('、') }} 在所选年份区间内没有可用数据（例如 ICCV 为奇数年会议、
-        ECCV 为偶数年会议），这部分年份不会被当作零热度统计。
-      </DemoNotice>
+      <p v-if="excludedNote" class="filter-notice notice notice-warn">{{ excludedNote }}</p>
+      <p v-if="coverageNote" class="filter-notice filter-coverage">{{ coverageNote }}</p>
     </section>
+
+    <p v-if="loadError" class="card load-error" role="alert">
+      <span>{{ loadError }}</span>
+      <button v-if="loadErrorRetryable" type="button" class="btn btn-secondary" @click="load">
+        重试
+      </button>
+    </p>
 
     <section class="kpi-grid">
       <StatCard
-        label="统计范围内论文样本"
-        :value="sampleTotal.toLocaleString('zh-CN')"
-        :hint="`按会议年份纳入分析的总篇数${DEMO_SUFFIX}`"
+        label="纳入分析分母"
+        :value="summary ? String(summary.denominator) : '—'"
+        hint="已完成关键词处理的有效论文"
       />
-      <StatCard label="出现过的关键词" value="386" :hint="`系统提取后去重${DEMO_SUFFIX}`" />
+      <StatCard
+        label="出现过的关键词"
+        :value="summary ? String(summary.keyword_total) : '—'"
+        :hint="
+          summary
+            ? `系统提取去重；未归类 ${summary.unmapped_keyword_total} 个`
+            : '系统提取去重'
+        "
+      />
       <StatCard
         label="范围最热方向"
-        :value="hottestTopic ? hottestTopic.name : '—'"
-        :hint="hottestTopic ? `${hottestTopic.count} 篇相关论文` : '当前范围没有可用样本'"
+        :value="summary?.hottest ? summary.hottest.name : '—'"
+        :hint="
+          summary?.hottest
+            ? `${summary.hottest.count} 篇相关论文 · 占比 ${formatShare(summary.hottest.share)}`
+            : '当前范围没有可用样本'
+        "
       />
       <StatCard
         label="数据更新时间"
-        value="09-20"
-        :hint="`2026-09-20 22:10 同步${DEMO_SUFFIX}`"
+        :value="summary?.data_updated_at ? updatedAtText.slice(5, 10) : '—'"
+        :hint="updatedAtText"
       />
     </section>
 
@@ -265,11 +438,27 @@ watch(
         <div class="card-header">
           <div>
             <h2 class="card-title">Top 10 热门研究方向</h2>
-            <p class="card-subtitle">按当前统计范围内包含该方向的论文数排序（演示数据）</p>
+            <p class="card-subtitle">
+              按当前范围内包含该方向的论文数排序（去重计数，同一篇论文只算一次）
+            </p>
           </div>
           <span class="tag">单位：篇</span>
         </div>
-        <RankBarList :items="rankItems" @select="openTopicDrawer($event.key)" />
+
+        <RankBarList
+          v-if="rankItems.length"
+          :items="rankItems"
+          @select="openTopicDrawer({ key: $event.key, name: $event.label })"
+        />
+        <p v-else-if="loading" class="rank-placeholder">正在加载统计结果…</p>
+        <p v-else-if="!hasData" class="rank-placeholder">
+          当前筛选范围内没有可统计的论文。可放宽年份或会议条件；若确实没有数据，
+          这不是「热度为 0」，而是样本未覆盖。
+        </p>
+        <p v-else class="rank-placeholder">
+          该范围内没有已归入主题的关键词，榜单为空。图例处可看到未归类关键词的数量。
+        </p>
+
         <div class="rank-footer">
           <span>点击任意方向可查看相关论文</span>
           <RouterLink class="rank-link" to="/papers">进入论文管理 →</RouterLink>
@@ -278,19 +467,57 @@ watch(
 
       <ChartContainer
         title="关键词关系图谱"
-        subtitle="共现关系取自论文题目与摘要的共词统计（演示数据）"
+        subtitle="节点为研究主题，连线表示两个主题在同一篇论文中共同出现（按去重论文数计权）"
         :legend="graphLegend"
         height="430px"
-        pending-note="图谱由 ECharts 渲染，将在阶段 8 接入真实统计接口后实现（节点大小 ∝ √相关论文数，连线粗细 ∝ 共现论文数）。"
       >
+        <template #tools>
+          <label class="graph-control">
+            <span class="field-label">节点上限</span>
+            <select v-model.number="nodeLimit" class="input input-compact">
+              <option v-for="limit in NODE_LIMITS" :key="limit" :value="limit">{{ limit }}</option>
+            </select>
+          </label>
+          <label class="graph-control">
+            <span class="field-label">最小共现</span>
+            <select v-model.number="minEdge" class="input input-compact">
+              <option v-for="edge in MIN_EDGES" :key="edge" :value="edge">{{ edge }} 篇</option>
+            </select>
+          </label>
+        </template>
+
+        <KeywordGraph
+          v-if="graphNodes.length"
+          :nodes="graphNodes"
+          :edges="graphEdges"
+          height="430px"
+          @select="openTopicDrawer"
+        />
+        <div v-else class="chart-placeholder">
+          <p class="chart-placeholder-title">
+            {{ loading ? '正在加载图谱…' : '当前范围没有可绘制的主题关系' }}
+          </p>
+          <p class="chart-placeholder-note">
+            {{
+              loading
+                ? '正在请求 /api/stats/graph'
+                : '图谱需要至少两个已归入主题的关键词。可放宽筛选，或到「采集与导入」补充论文。'
+            }}
+          </p>
+        </div>
+
         <template #footnote>
           <span>
-            <strong>节点</strong>：一个主题；<strong>节点越大</strong>，表示当前范围内与它相关的论文越多。
+            <strong>节点</strong>：一个研究主题；<strong>节点越大</strong>，当前范围内与它相关的论文越多。
           </span>
           <span>
-            <strong>连线</strong>：两个主题在同一篇论文中出现过；<strong>越粗</strong>表示共现论文数越多。
+            <strong>连线</strong>：两个主题出现在同一篇论文中；<strong>越粗</strong>表示共现论文数越多。
           </span>
-          <span>当前筛选下榜单条目数：{{ rankItems.length }}（演示）</span>
+          <span class="graph-range">{{ graphRangeNote }}</span>
+          <span>
+            节点上限与最小共现可调；主题来自版本化主题表，未归类的关键词不参与图谱（它们不会
+            与任何节点连成边）。
+          </span>
         </template>
       </ChartContainer>
     </section>
@@ -299,8 +526,8 @@ watch(
       <div class="trend-entry-main">
         <h2 class="card-title">下一步：把「现在很热」变成「怎么变热的」</h2>
         <p class="trend-entry-desc">
-          进入热度走势对比，选择研究方向与会议，逐年播放 2022—2025 的热度曲线，看清某个方向是在持续升温，
-          还是已经开始降温。
+          进入热度走势对比，选择研究方向与会议，逐年播放各年份的热度曲线，看清某个方向是在持续升温，
+          还是已经开始降温。纵轴使用各会议各自的占比（count / 该会议年份样本量），避免会议规模差异造成误读。
         </p>
         <div class="trend-entry-actions">
           <RouterLink
@@ -308,7 +535,7 @@ watch(
             :to="{
               path: '/trends',
               query: {
-                kw: hottestTopic ? hottestTopic.name : undefined,
+                kw: trendEntry ? summary?.hottest?.key : undefined,
                 conf: conferences.join(','),
               },
             }"
@@ -320,32 +547,34 @@ watch(
       </div>
       <div class="trend-entry-cards">
         <RouterLink
-          v-for="item in trendEntryTopics"
-          :key="item.name"
+          v-for="item in (top?.items ?? []).slice(0, 3)"
+          :key="item.key"
           class="trend-entry-card"
-          :to="{ path: '/trends', query: { kw: item.name } }"
+          :to="{ path: '/trends', query: { kw: item.key } }"
         >
           <span class="trend-entry-conf">
             <span
               class="conf-dot"
-              :style="{ background: conferenceColors[item.conference] }"
+              :style="{ background: groupColor(item.group) }"
               aria-hidden="true"
             ></span>
-            {{ item.conference }}
+            {{ groupLabel(item.group) }}
           </span>
           <span class="trend-entry-topic">{{ item.name }}</span>
-          <span class="trend-entry-hint">{{ item.hint }}</span>
+          <span class="trend-entry-hint">{{ item.count }} 篇 · 占比 {{ formatShare(item.share) }}</span>
         </RouterLink>
       </div>
     </section>
 
     <PaperDrawer
-      :open="Boolean(activeTopic)"
-      :topic-name="activeTopic"
-      :count="activeTopicCount"
-      :share="activeTopicShare"
+      :open="Boolean(activeKey)"
+      :topic-name="activeName"
+      :count="activeCount"
+      :share="activeShare"
       :co-topics="drawerCoTopics"
       :papers="drawerPapers"
+      :papers-loading="drawerPapersLoading"
+      :papers-error="drawerPapersError"
       :list-query="drawerQuery"
       @close="closeDrawer"
     />
@@ -380,8 +609,31 @@ watch(
   color: var(--color-primary);
 }
 
+.scope-loading {
+  color: var(--color-text-faint);
+  font-size: 12px;
+}
+
 .filter-notice {
   margin-top: 16px;
+}
+
+.filter-coverage {
+  font-size: 12px;
+  line-height: 1.7;
+  color: var(--color-text-subtle);
+}
+
+.load-error {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 24px;
+  padding: 16px 20px;
+  border-color: var(--color-danger-border, #fecaca);
+  color: var(--color-danger, #b91c1c);
+  font-size: 13px;
 }
 
 .kpi-grid {
@@ -403,6 +655,13 @@ watch(
   flex-direction: column;
 }
 
+.rank-placeholder {
+  padding: 24px;
+  font-size: 13px;
+  line-height: 1.7;
+  color: var(--color-text-subtle);
+}
+
 .rank-footer {
   display: flex;
   align-items: center;
@@ -421,6 +680,49 @@ watch(
 
 .rank-link:hover {
   text-decoration: underline;
+}
+
+.graph-control {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.input-compact {
+  width: auto;
+  padding: 4px 8px;
+  font-size: 12px;
+}
+
+.graph-range {
+  color: var(--color-text-muted);
+}
+
+.chart-placeholder {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  height: 100%;
+  margin: 20px 24px;
+  border: 1px dashed var(--color-border-strong);
+  border-radius: var(--radius-md);
+  text-align: center;
+  padding: 16px;
+}
+
+.chart-placeholder-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--color-text-muted);
+}
+
+.chart-placeholder-note {
+  max-width: 460px;
+  font-size: 12px;
+  color: var(--color-text-subtle);
+  line-height: 1.7;
 }
 
 .trend-entry {
