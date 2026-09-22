@@ -31,6 +31,7 @@ from ..models.entities import (
     PaperKeyword,
     PaperSource,
 )
+from .maintenance import mark_analysis_changed
 from .keywords import (
     clear_system_keywords,
     current_ruleset_version,
@@ -412,6 +413,8 @@ def update_paper(
     paper.updated_at = _now()
     session.add(paper)
     session.flush()
+    # 论文内容或关键词变化都会影响统计口径
+    mark_analysis_changed(session)
 
     if author_keywords is not None:
         sync_paper_keywords(
@@ -432,6 +435,7 @@ def delete_paper(session: Session, paper: Paper) -> None:
     """
     session.delete(paper)
     session.flush()
+    mark_analysis_changed(session)
 
 
 def query_papers(
@@ -446,12 +450,28 @@ def query_papers(
     topic: str | None = None,
     data_status: str | None = None,
     keyword_status: str | None = None,
+    from_stats: bool = False,
+    keyword_origin: str | None = None,
+    ruleset_version: str | None = None,
+    in_analysis_set: bool = False,
     sort: str = "code",
     order: str = "asc",
     page: int = 1,
     page_size: int = DEFAULT_PAGE_SIZE,
 ) -> dict[str, object]:
-    """检索论文：精确/模糊匹配 + 组合筛选 + 稳定排序 + 分页。"""
+    """检索论文：精确/模糊匹配 + 组合筛选 + 稳定排序 + 分页。
+
+    **从统计页跳转时必须保证口径一致**（开发设计与验收.md 第 7.5 节）：
+    统计的分子来自 v_analysis_keyword（只算系统关键词、只认当前规则版本、只含分析集合），
+    因此列表若按普通检索返回，条数会比统计给出的数字多。
+    带 `from_stats = True` 时启用三项约束（也可单独显式传参）：
+
+    - `keyword_origin = 'system'`：关键词/主题筛选只匹配系统关键词，排除作者关键词命中；
+    - `ruleset_version = 当前版本`：排除旧版本关键词命中的论文；
+    - `in_analysis_set = True`：限制在分析集合内（会议年份有效、标题可用、关键词已完成且为当前版本）。
+
+    不带 `from_stats` 时行为与阶段 3 完全一致，论文管理页的日常检索不受影响。
+    """
     if sort not in SORT_FIELDS:
         raise ApiError(400, "invalid_parameter", f"排序字段必须是 {'/'.join(SORT_FIELDS)} 之一。")
     if order not in ("asc", "desc"):
@@ -464,6 +484,16 @@ def query_papers(
         raise ApiError(400, "invalid_parameter", "页码必须大于等于 1。")
     if page_size < 1 or page_size > MAX_PAGE_SIZE:
         raise ApiError(400, "invalid_parameter", f"每页条数必须在 1 到 {MAX_PAGE_SIZE} 之间。")
+    if keyword_origin is not None and keyword_origin not in ("author", "system"):
+        raise ApiError(400, "invalid_parameter", "keyword_origin 只能是 author 或 system。")
+    if from_stats:
+        # 统计口径：只认系统关键词与当前规则版本，并限制在分析集合内
+        keyword_origin = "system"
+        ruleset_version = ruleset_version or current_ruleset_version(session)
+        in_analysis_set = True
+    if ruleset_version is not None and not ruleset_version.strip():
+        raise ApiError(400, "invalid_parameter", "ruleset_version 不能为空字符串。")
+
     if conferences:
         invalid = [item for item in conferences if item not in CONFERENCES]
         if invalid:
@@ -477,6 +507,18 @@ def query_papers(
     count_statement = select(func.count()).select_from(Paper)
 
     conditions = []
+    if in_analysis_set:
+        # 与分析集合视图同一套条件（会议年份有效、标题可用、关键词已完成且为当前版本）
+        effective_version = ruleset_version or current_ruleset_version(session)
+        conditions.extend(
+            [
+                col(Paper.conference).in_(list(CONFERENCES)),
+                Paper.year > 0,
+                func.length(Paper.title_normalized) >= MIN_ANALYSIS_TITLE_LENGTH,
+                Paper.keyword_status == "done",
+                Paper.keyword_ruleset_version == effective_version,
+            ]
+        )
     if conferences:
         conditions.append(col(Paper.conference).in_(conferences))
     if year_from is not None:
@@ -520,6 +562,7 @@ def query_papers(
                 .where(
                     PaperKeyword.paper_id == Paper.id,
                     func.lower(Keyword.name).like(f"%{lowered}%"),
+                    *keyword_relation_filters(),
                 )
             )
             like_clauses = [
@@ -532,6 +575,15 @@ def query_papers(
                 )
             conditions.append(or_(*like_clauses))
 
+    def keyword_relation_filters() -> list:
+        """关键词关系上的来源与版本条件，三个关键词类筛选共用。"""
+        filters = []
+        if keyword_origin:
+            filters.append(Keyword.origin == keyword_origin)
+        if ruleset_version:
+            filters.append(PaperKeyword.ruleset_version == ruleset_version)
+        return filters
+
     if keyword:
         normalized = normalize_keyword(keyword)
         keyword_exists = (
@@ -540,6 +592,7 @@ def query_papers(
             .where(
                 PaperKeyword.paper_id == Paper.id,
                 Keyword.name_normalized == normalized,
+                *keyword_relation_filters(),
             )
         )
         conditions.append(keyword_exists.exists())
@@ -551,6 +604,7 @@ def query_papers(
             .where(
                 PaperKeyword.paper_id == Paper.id,
                 Keyword.topic_id == _topic_id_for(session, topic),
+                *keyword_relation_filters(),
             )
         )
         conditions.append(topic_exists.exists())

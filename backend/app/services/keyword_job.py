@@ -19,10 +19,15 @@ from datetime import UTC, datetime
 from sqlalchemy import text
 from sqlmodel import Session, select
 
-from ..config import KEYWORD_RULESET_VERSION
+from ..config import CONFERENCES, KEYWORD_RULESET_VERSION
 from ..models.entities import AppMeta, Paper
 from .keyword_rules import KeywordExtractor, ExtractionResult
-from .keywords import clear_system_keywords, sync_paper_keywords
+from .keywords import (
+    clear_system_keywords,
+    current_ruleset_version,
+    sync_paper_keywords,
+)
+from .maintenance import mark_analysis_changed
 
 logger = logging.getLogger("cvplatform.keywords")
 
@@ -107,6 +112,60 @@ def apply_result(
     paper.keyword_processed_at = _now()
     paper.updated_at = _now()
     session.add(paper)
+    # 分析集合发生变化：让统计缓存整体失效
+    mark_analysis_changed(session)
+
+
+def status_counts(session: Session) -> dict[str, object]:
+    """统计口径相关的数量汇总，供维护命令与 /api/keywords/status 复用。
+
+    `pending_or_stale` 是「按需处理」要动的总量：未处理、处理失败，或规则版本过期。
+    """
+    current = current_ruleset_version(session)
+    analysis_papers = session.execute(
+        text("SELECT COUNT(*) FROM v_analysis_paper")
+    ).scalar_one()
+    corpus_papers = session.execute(
+        text("SELECT COUNT(*) FROM v_corpus_paper")
+    ).scalar_one()
+    by_status = {
+        str(status): int(count)
+        for status, count in session.execute(
+            text("SELECT keyword_status, COUNT(*) FROM paper GROUP BY keyword_status")
+        ).all()
+    }
+    pending_or_stale = int(
+        session.execute(
+            text(
+                "SELECT COUNT(*) FROM paper "
+                "WHERE keyword_status IS NOT 'done' "
+                "   OR keyword_ruleset_version IS NOT ("
+                "        SELECT value FROM meta WHERE key = 'keyword_ruleset_version')"
+            )
+        ).scalar_one()
+    )
+    system_keywords = int(
+        session.execute(
+            text("SELECT COUNT(*) FROM keyword WHERE origin = 'system'")
+        ).scalar_one()
+    )
+    mapped_keywords = int(
+        session.execute(
+            text(
+                "SELECT COUNT(*) FROM keyword "
+                "WHERE origin = 'system' AND topic_id IS NOT NULL"
+            )
+        ).scalar_one()
+    )
+    return {
+        "analysis_papers": int(analysis_papers),
+        "corpus_papers": int(corpus_papers),
+        "by_status": by_status,
+        "pending_or_stale": pending_or_stale,
+        "ruleset_version": current,
+        "system_keywords": system_keywords,
+        "mapped_keywords": mapped_keywords,
+    }
 
 
 def process_paper(session: Session, paper: Paper) -> ExtractionResult:
@@ -117,27 +176,46 @@ def process_paper(session: Session, paper: Paper) -> ExtractionResult:
     return result
 
 
-def pending_papers(session: Session, *, limit: int | None = None) -> list[Paper]:
-    """取出需要处理的论文：未处理、处理失败，或规则版本已过期。"""
-    statement = (
-        select(Paper)
-        .where(
-            (Paper.keyword_status != "done")
-            | (Paper.keyword_ruleset_version != KEYWORD_RULESET_VERSION)
+def pending_papers(
+    session: Session, *, limit: int | None = None, force: bool = False
+) -> list[Paper]:
+    """取出需要处理的论文：未处理、处理失败，或规则版本已过期。
+
+    force = True 时忽略状态与版本，对语料集合内的全部论文重算。
+    这条路径用于**规则或词表调整后的一致重算**：版本号已提升但库里还留着
+    同版本号的旧结果时（校准过程中会出现），只有强制重算才能让口径与代码一致。
+    """
+    if force:
+        statement = (
+            select(Paper)
+            .where(
+                Paper.conference.in_(CONFERENCES),
+                Paper.year > 0,
+            )
+            .order_by(Paper.id)
         )
-        .order_by(Paper.id)
-    )
+    else:
+        statement = (
+            select(Paper)
+            .where(
+                (Paper.keyword_status != "done")
+                | (Paper.keyword_ruleset_version != KEYWORD_RULESET_VERSION)
+            )
+            .order_by(Paper.id)
+        )
     if limit is not None:
         statement = statement.limit(limit)
     return list(session.exec(statement).all())
 
 
-def process_pending(session: Session, *, limit: int | None = None) -> ProcessingSummary:
+def process_pending(
+    session: Session, *, limit: int | None = None, force: bool = False
+) -> ProcessingSummary:
     """批量处理待处理论文；语料只拟合一次，逐篇抽取。
 
     供阶段 5 的单篇保存后调用，也供阶段 6、7 的批量任务复用。
     """
-    batch = pending_papers(session, limit=limit)
+    batch = pending_papers(session, limit=limit, force=force)
     summary = ProcessingSummary()
 
     extractor, corpus = build_extractor(session)
