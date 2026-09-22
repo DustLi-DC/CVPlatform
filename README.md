@@ -2,9 +2,10 @@
 
 计算机视觉顶会论文分析平台，采用 Vue 3 前端与 Python / FastAPI 后端。
 
-当前进度：论文管理与论文详情已接入真实后端接口（SQLite 持久化）；单篇采集已接入真实外部来源
-（CVF Open Access、ECVA 与 OpenAlex 兜底检索），并按标题产出系统关键词；热门方向总览、
-热度走势对比仍使用集中管理的演示数据并已标注，将在阶段 8、9 接入统计接口。
+当前进度：论文管理与论文详情已接入真实后端接口（SQLite 持久化）；单篇采集与批量导入已接入真实
+外部来源（CVF Open Access、ECVA 与 OpenAlex 兜底检索），关键词抽取规则按 1200 篇真实样本校准到
+`kw-v3`；统计后端（概览、热点 Top、共现图谱、热度趋势）已就绪，口径为「分析集合去重论文数」。
+热门方向总览与热度走势页面仍使用集中管理的演示数据并已标注，将在阶段 8、9 接入统计接口。
 
 ## 开发环境
 
@@ -23,8 +24,9 @@ CVPlatform/
 │   │   ├── db/           # 引擎、会话与版本化迁移
 │   │   ├── models/       # SQLModel 实体
 │   │   ├── schemas/      # 请求与响应契约
-│   │   ├── services/     # 论文服务层、关键词抽取、采集编排与外部来源
-│   │   ├── routers/      # /api/papers 与 /api/collect 接口
+│   │   ├── data/         # 版本化主题表 topics_v1.json（人工复核后可提交）
+│   │   ├── services/     # 论文服务层、关键词抽取、统计口径、采集编排与外部来源
+│   │   ├── routers/      # /api/papers、/api/collect、/api/import、/api/stats、/api/keywords
 │   │   └── main.py       # 应用入口、统一错误响应、健康检查
 │   ├── tests/            # 独立临时数据库上的测试
 │   ├── requirements.txt     # 运行时依赖
@@ -50,15 +52,37 @@ CVPlatform/
 
 | 路径 | 页面 | 数据来源 |
 |---|---|---|
-| `/` | 热门方向总览 | 演示数据（阶段 8 接入统计接口） |
-| `/trends` | 热度走势对比 | 演示数据（阶段 9 接入趋势接口） |
+| `/` | 热门方向总览 | 演示数据（接口 `/api/stats/summary`、`/api/stats/top` 已就绪，阶段 8 接入） |
+| `/trends` | 热度走势对比 | 演示数据（接口 `/api/stats/trend` 已就绪，阶段 9 接入） |
 | `/papers` | 论文管理 | **后端接口 `/api/papers`** |
 | `/papers/:id` | 论文详情 | **后端接口 `/api/papers/{id}`** |
-| `/collect` | 采集与导入 | 后端接口 `/api/collect/*` 已就绪；界面联调与批量导入在阶段 6 |
+| `/collect` | 采集与导入 | **后端接口 `/api/collect/*`、`/api/import/*`** |
 | `/about` | 关于平台 | 静态说明 |
 
 数据边界：已接入接口的页面直接显示数据库内容，不混用演示数据；未接入的页面在页头标注
 「演示数据 / 尚未接入后端接口」，且不显示虚假的处理进度。
+
+## 统计口径与维护命令
+
+统计只读两个视图（`v_analysis_paper`、`v_analysis_keyword`）：只有「会议年份有效、标题可用、
+关键词已按当前规则版本处理完成」的论文才进入分母，且只统计系统抽取的关键词。
+「关键词处理成功但结果为空」的论文仍计入分母；待处理、失败与旧版本的论文不计入分母，
+但在响应的 `excluded` 字段里单列。缺失与零严格区分：分母为零或会议年份无记录时返回 `null`，
+有样本但主题不存在时返回 `0`。
+
+维护命令（在仓库根目录执行，`PYTHONPATH=backend`）：
+
+```powershell
+$env:PYTHONPATH = "backend"
+# 关键词处理现状（分母、待处理量、主题映射覆盖）
+.\.venv\Scripts\python.exe -m app.maintenance_cli status
+# 按需处理待处理或待重算的论文；--force 表示对语料全量重算
+.\.venv\Scripts\python.exe -m app.maintenance_cli process-keywords --force
+# 重新载入主题表并重算关键词的主题映射
+.\.venv\Scripts\python.exe -m app.maintenance_cli reload-topics
+# 用独立 SQL 复算统计结果，并测量各接口耗时与内存峰值
+.\.venv\Scripts\python.exe -m app.maintenance_cli verify-stats
+```
 
 ## 安装依赖
 
