@@ -72,6 +72,9 @@ echo "  数据库：  $DB_PATH"
 # 实测在目标服务器上匹配失败，而服务其实是 active 的。
 systemctl cat "$SERVICE" >/dev/null 2>&1 || fail "服务单元不存在：$SERVICE（模板见 deploy/cvplatform.service.example）"
 id cvplatform >/dev/null || fail "运行用户 cvplatform 不存在"
+echo "  应用目录内容："
+ls -la "$APP_DIR" | sed 's/^/    /'
+echo "  运行用解释器：$APP_DIR/.venv/bin/python"
 # 数据目录缺失时直接建好（首次部署常见），并交给运行用户
 if [[ ! -d "$DATA_DIR" ]]; then
   echo "  数据目录不存在，创建：$DATA_DIR"
@@ -105,7 +108,15 @@ sync_dir() {
 }
 sync_dir "$RELEASE_DIR/backend/app/" "$APP_DIR/backend/app/"
 sync_dir "$RELEASE_DIR/frontend/dist/" "$APP_DIR/frontend/dist/"
-run "cp -f '$RELEASE_DIR/deploy/backup_database.py' '$APP_DIR/deploy/'"
+# 把部署脚本放进应用目录只是方便后续在服务器上直接调用；这里不能因为路径异常而中止更新
+if [[ -e "$APP_DIR/deploy" && ! -d "$APP_DIR/deploy" ]]; then
+  echo "  !! $APP_DIR/deploy 已存在但不是目录（旧部署可能留下同名文件），跳过脚本拷贝；"
+  echo "     更新本身不受影响，回退/备份脚本可从发布目录 $RELEASE_DIR/deploy/ 直接调用。"
+else
+  run "install -d '$APP_DIR/deploy'"
+  run "cp -f '$RELEASE_DIR/deploy/backup_database.py' '$APP_DIR/deploy/'"
+  run "cp -f '$RELEASE_DIR/deploy/smoke_check.sh' '$APP_DIR/deploy/'"
+fi
 run "cp -f '$RELEASE_DIR/requirements.txt' '$APP_DIR/requirements.txt'"
 # 前端入口文件的属主与权限交给 Nginx（读权限即可）
 run "chown -R cvplatform:cvplatform '$APP_DIR/backend' '$APP_DIR/frontend/dist' '$APP_DIR/deploy'"

@@ -64,7 +64,7 @@ DEN="$(json_field /api/stats/summary "['denominator']")"
 COV="$(json_field /api/stats/coverage "['totals']['analysis_papers']")"
 echo "  概览分母=${DEN:-未知} | 覆盖接口分析分母=${COV:-未知}"
 if [[ -z "$DEN" || -z "$COV" ]]; then
-  echo "  -- 本机没有可用的 python，跳过一致性比对（可在服务器上重跑本脚本）"
+  echo "  -- 取不到分母（接口可能还不是新版本，返回了 404），无法比对；先确认上面的接口检查是否通过"
 elif [[ "$DEN" != "$COV" ]]; then
   echo "  !! 两处分母不一致（统计接口与覆盖接口应取同一分析集合）"
   FAILED=$((FAILED + 1))
