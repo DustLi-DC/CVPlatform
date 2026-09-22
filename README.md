@@ -5,7 +5,8 @@
 当前进度：论文管理与论文详情已接入真实后端接口（SQLite 持久化）；单篇采集与批量导入已接入真实
 外部来源（CVF Open Access、ECVA 与 OpenAlex 兜底检索），关键词抽取规则按 1200 篇真实样本校准到
 `kw-v3`；统计后端（概览、热点 Top、共现图谱、热度趋势）已就绪，口径为「分析集合去重论文数」。
-热门方向总览与热度走势页面仍使用集中管理的演示数据并已标注，将在阶段 8、9 接入统计接口。
+热门方向总览已接入统计接口（Top 10、关键词图谱、数据覆盖说明），并支持按会议年份筛选；
+热度走势页面仍使用集中管理的演示数据并已标注，将在阶段 9 接入趋势接口。
 
 ## 开发环境
 
@@ -13,6 +14,7 @@
 - Node.js 24.15.0、npm 11.12.1
 - 前端：Vue 3、Vite、TypeScript、Vue Router
 - 后端：FastAPI、Uvicorn、SQLModel、python-multipart
+- 图表：ECharts（阶段 8 引入，按需注册 graph 图表与 canvas 渲染器，不整包引入）
 
 ## 目录
 
@@ -34,14 +36,14 @@ CVPlatform/
 ├── deploy/               # 生产配置模板、备份脚本、升级回退说明
 ├── frontend/
 │   ├── src/
-│   │   ├── api/          # HTTP 请求（health、paperApi）
+│   │   ├── api/          # HTTP 请求（health、paperApi、collectApi、importApi、statsApi）
 │   │   ├── components/   # 可复用组件
 │   │   ├── composables/  # 组合式函数（轻提示）
 │   │   ├── demo/         # 尚未接入接口的页面所用演示数据
 │   │   ├── layouts/      # 公共布局
 │   │   ├── router/       # 六个页面路由
 │   │   ├── styles/       # 设计令牌与公共 UI 样式
-│   │   ├── types/        # 领域类型（字段与后端契约一致）
+│   │   ├── types/        # 领域类型（字段与后端契约一致，含统计与分组配色）
 │   │   └── views/        # 页面组件
 │   ├── package.json
 │   └── package-lock.json
@@ -52,7 +54,7 @@ CVPlatform/
 
 | 路径 | 页面 | 数据来源 |
 |---|---|---|
-| `/` | 热门方向总览 | 演示数据（接口 `/api/stats/summary`、`/api/stats/top` 已就绪，阶段 8 接入） |
+| `/` | 热门方向总览 | **后端接口 `/api/stats/{summary,top,graph}`**（ECharts 图谱） |
 | `/trends` | 热度走势对比 | 演示数据（接口 `/api/stats/trend` 已就绪，阶段 9 接入） |
 | `/papers` | 论文管理 | **后端接口 `/api/papers`** |
 | `/papers/:id` | 论文详情 | **后端接口 `/api/papers/{id}`** |
@@ -61,6 +63,10 @@ CVPlatform/
 
 数据边界：已接入接口的页面直接显示数据库内容，不混用演示数据；未接入的页面在页头标注
 「演示数据 / 尚未接入后端接口」，且不显示虚假的处理进度。
+
+从总览页跳转到论文列表时会带上 `from_stats=true`（连同当前会议、年份与主题条件），
+后端据此强制应用统计口径（只算系统关键词、只认当前规则版本、限制在分析集合内），
+使列表条数与统计给出的计数一致；列表页会把这一口径显示为一条「统计口径」条件。
 
 ## 统计口径与维护命令
 
