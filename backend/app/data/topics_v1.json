@@ -1,7 +1,8 @@
 {
-  "版本": "topic-v1",
-  "说明": "由 1200 篇真实样本的系统关键词归纳的首版主题表，供人工复核后定稿",
-  "依据样本": "6 个会议年份 × 200 篇（见 数据覆盖与来源.md）",
+  "版本": "topic-v2",
+  "说明": "主题归并表：把系统抽取到的同义表达归并到主题，只影响统计展示，不改写原始关键词。未映射到任何主题的关键词如实保留为「未归类」。",
+  "依据样本": "6 个会议年份 × 200 篇 = 1200 篇真实论文的系统关键词（关键词规则 kw-v3），见 数据覆盖与来源.md",
+  "分组说明": "group_name 在界面上用于主题分组配色，与会议颜色是两套独立概念；缺失时用中性色，不伪造分组。",
   "主题": [
     {
       "slug": "object-detection",
@@ -11,251 +12,684 @@
         "object detection",
         "detection",
         "detector",
-        "open-vocabulary detection"
+        "detectors",
+        "open-vocabulary object detection",
+        "object detector",
+        "dense detection",
+        "detection transformer",
+        "instance detection",
+        "small object"
       ]
     },
     {
-      "slug": "semantic-segmentation",
-      "name": "语义分割",
+      "slug": "segmentation",
+      "name": "图像分割",
       "group_name": "perception",
       "aliases": [
-        "semantic segmentation",
         "segmentation",
+        "semantic segmentation",
         "instance segmentation",
-        "panoptic segmentation"
+        "panoptic segmentation",
+        "segment anything",
+        "referring segmentation",
+        "video segmentation",
+        "interactive segmentation",
+        "masked image",
+        "mask"
       ]
     },
     {
-      "slug": "point-cloud",
+      "slug": "classification",
+      "name": "图像分类与识别",
+      "group_name": "perception",
+      "aliases": [
+        "classification",
+        "image classification",
+        "recognition",
+        "fine-grained",
+        "fine-grained recognition",
+        "classifier",
+        "prototype",
+        "category"
+      ]
+    },
+    {
+      "slug": "pose-and-human",
+      "name": "人体姿态与手势",
+      "group_name": "perception",
+      "aliases": [
+        "pose",
+        "pose estimation",
+        "object pose",
+        "human pose",
+        "hand",
+        "hand pose",
+        "body",
+        "skeleton",
+        "motion capture",
+        "human motion"
+      ]
+    },
+    {
+      "slug": "face-and-person",
+      "name": "人脸与人体",
+      "group_name": "perception",
+      "aliases": [
+        "face",
+        "facial",
+        "face recognition",
+        "face swapping",
+        "expression",
+        "gaze",
+        "person",
+        "pedestrian",
+        "re-identification",
+        "identity",
+        "identity-preserving",
+        "portrait"
+      ]
+    },
+    {
+      "slug": "tracking",
+      "name": "目标跟踪",
+      "group_name": "perception",
+      "aliases": [
+        "tracking",
+        "multi-object tracking",
+        "visual tracking",
+        "trajectory",
+        "data association",
+        "tracking-by-detection"
+      ]
+    },
+    {
+      "slug": "anomaly-detection",
+      "name": "异常检测",
+      "group_name": "perception",
+      "aliases": [
+        "anomaly detection",
+        "anomaly",
+        "defect detection",
+        "out-of-distribution",
+        "ood detection",
+        "novelty detection",
+        "industrial inspection"
+      ]
+    },
+    {
+      "slug": "image-quality",
+      "name": "图像质量与底层视觉",
+      "group_name": "perception",
+      "aliases": [
+        "image quality",
+        "artifact",
+        "blur",
+        "low-light",
+        "exposure",
+        "hdr",
+        "raw",
+        "demosaicing",
+        "dehazing",
+        "deraining",
+        "underwater",
+        "compression artifact",
+        "denoising",
+        "image denoising"
+      ]
+    },
+    {
+      "slug": "three-d-reconstruction",
+      "name": "三维重建与辐射场",
+      "group_name": "three_d",
+      "aliases": [
+        "3d",
+        "reconstruction",
+        "3d reconstruction",
+        "neural radiance field",
+        "radiance field",
+        "nerf",
+        "gaussian splatting",
+        "3d gaussian",
+        "rendering",
+        "novel view synthesis",
+        "view synthesis",
+        "mesh",
+        "surface",
+        "signed distance",
+        "distance field",
+        "point cloud",
+        "multi-view",
+        "camera",
+        "monocular",
+        "depth estimation",
+        "depth",
+        "stereo",
+        "implicit",
+        "gaussian",
+        "radiance",
+        "splatting",
+        "implicit representation",
+        "4d"
+      ]
+    },
+    {
+      "slug": "point-cloud-perception",
       "name": "点云与三维感知",
       "group_name": "three_d",
       "aliases": [
-        "point cloud",
-        "point clouds",
+        "point cloud segmentation",
+        "point cloud registration",
+        "point-based",
+        "voxel",
+        "octree",
+        "neural field",
+        "3d detection",
+        "3d scene",
+        "indoor scene",
+        "outdoor scene",
         "lidar"
       ]
     },
     {
-      "slug": "depth-estimation",
-      "name": "深度估计",
+      "slug": "geometry-and-shape",
+      "name": "几何与形状建模",
       "group_name": "three_d",
       "aliases": [
-        "depth estimation",
-        "monocular depth",
-        "depth map"
+        "geometry",
+        "geometric",
+        "shape",
+        "3d shape",
+        "correspondence",
+        "registration",
+        "alignment",
+        "matching",
+        "localization",
+        "structure from motion",
+        "slam",
+        "odometry",
+        "calibration",
+        "depth map",
+        "surface reconstruction",
+        "3d point"
       ]
     },
     {
-      "slug": "radiance-field",
-      "name": "辐射场与三维重建",
+      "slug": "generative-3d",
+      "name": "三维生成与数字人",
       "group_name": "three_d",
       "aliases": [
-        "radiance field",
-        "neural radiance",
-        "neural radiance field",
-        "reconstruction",
-        "3d reconstruction"
+        "text-to-3d",
+        "3d generation",
+        "avatar",
+        "digital human",
+        "human reconstruction",
+        "garment",
+        "clothed human",
+        "face reconstruction",
+        "head",
+        "gaussian avatar",
+        "scene generation"
       ]
     },
     {
-      "slug": "gaussian-splatting",
-      "name": "三维高斯泼溅",
-      "group_name": "three_d",
+      "slug": "video-understanding",
+      "name": "视频理解与动作识别",
+      "group_name": "video",
       "aliases": [
-        "gaussian splatting",
-        "3d gaussian",
-        "2d gaussian"
-      ]
-    },
-    {
-      "slug": "view-synthesis",
-      "name": "新视角合成",
-      "group_name": "three_d",
-      "aliases": [
-        "view synthesis",
-        "novel view"
-      ]
-    },
-    {
-      "slug": "diffusion-model",
-      "name": "扩散生成模型",
-      "group_name": "three_d",
-      "aliases": [
-        "diffusion",
-        "text-to-image diffusion",
-        "latent diffusion",
-        "diffusion model"
-      ]
-    },
-    {
-      "slug": "image-generation",
-      "name": "图像生成与编辑",
-      "group_name": "three_d",
-      "aliases": [
-        "image generation",
-        "image editing",
-        "generative model"
+        "video",
+        "action",
+        "action recognition",
+        "video understanding",
+        "video captioning",
+        "temporal action",
+        "long video",
+        "streaming",
+        "frame",
+        "temporal",
+        "event",
+        "event camera",
+        "video classification",
+        "long-term video",
+        "long video understanding"
       ]
     },
     {
       "slug": "video-generation",
-      "name": "视频生成与理解",
-      "group_name": "perception",
+      "name": "视频生成与编辑",
+      "group_name": "video",
       "aliases": [
         "video generation",
-        "video",
-        "temporal",
+        "video editing",
+        "video synthesis",
+        "image animation",
+        "motion transfer",
+        "talking head"
+      ]
+    },
+    {
+      "slug": "motion-and-flow",
+      "name": "光流与运动估计",
+      "group_name": "video",
+      "aliases": [
+        "optical flow",
+        "flow",
+        "motion estimation",
+        "scene flow",
+        "ego-motion",
+        "homography",
+        "dynamics",
         "motion"
       ]
     },
     {
-      "slug": "vision-language",
-      "name": "视觉语言模型",
-      "group_name": "multimodal",
+      "slug": "temporal-modeling",
+      "name": "时序建模与预测",
+      "group_name": "video",
       "aliases": [
-        "vision language",
-        "visual language",
-        "text prompt",
-        "text-to-image",
-        "language model"
+        "prediction",
+        "forecasting",
+        "temporal consistency",
+        "long-term",
+        "spatio-temporal",
+        "temporal modeling",
+        "state estimation",
+        "sequence"
       ]
     },
     {
-      "slug": "multimodal-learning",
-      "name": "多模态学习",
+      "slug": "diffusion-generation",
+      "name": "扩散模型与图像生成",
+      "group_name": "generative",
+      "aliases": [
+        "diffusion",
+        "diffusion model",
+        "generative",
+        "generative model",
+        "guidance",
+        "classifier-free",
+        "image generation",
+        "text-to-image",
+        "latent diffusion",
+        "score-based",
+        "flow matching",
+        "sampling",
+        "gan",
+        "generative adversarial",
+        "variational autoencoder"
+      ]
+    },
+    {
+      "slug": "image-editing",
+      "name": "图像编辑与复原",
+      "group_name": "generative",
+      "aliases": [
+        "editing",
+        "image editing",
+        "inpainting",
+        "image restoration",
+        "super-resolution",
+        "deblurring",
+        "style transfer",
+        "style",
+        "texture",
+        "image translation",
+        "colorization",
+        "relighting",
+        "image enhancement",
+        "retrieval",
+        "image retrieval",
+        "generative editing"
+      ]
+    },
+    {
+      "slug": "multimodal-language",
+      "name": "多模态与视觉语言",
       "group_name": "multimodal",
       "aliases": [
         "multimodal",
+        "modality",
+        "clip",
+        "language",
+        "vision-language",
+        "vlm",
+        "mllm",
+        "vision language model",
+        "text",
+        "textual",
+        "prompt",
         "cross-modal",
-        "image text",
-        "text encoder"
+        "image captioning",
+        "visual question answering",
+        "vision-language model",
+        "large language model",
+        "instruction tuning",
+        "fusion",
+        "grounding",
+        "visual grounding",
+        "referring expression",
+        "instruction following",
+        "caption",
+        "llm",
+        "instruction",
+        "visual instruction",
+        "multimodal large language",
+        "visual dialogue",
+        "multimodal dialogue"
       ]
     },
     {
-      "slug": "vision-transformer",
-      "name": "视觉 Transformer",
-      "group_name": "perception",
+      "slug": "open-vocabulary",
+      "name": "开放词汇与零样本",
+      "group_name": "multimodal",
       "aliases": [
-        "vision transformer",
-        "transformer",
-        "attention"
+        "open-vocabulary",
+        "zero-shot",
+        "few-shot",
+        "open-set",
+        "transfer",
+        "generalization",
+        "domain adaptation",
+        "domain gap",
+        "test-time adaptation",
+        "cross-domain",
+        "source domain",
+        "target domain",
+        "adaptation",
+        "domain shift",
+        "transfer learning",
+        "generalization gap",
+        "zero-shot transfer"
+      ]
+    },
+    {
+      "slug": "interactive-and-agent",
+      "name": "交互式与智能体",
+      "group_name": "multimodal",
+      "aliases": [
+        "interactive",
+        "user study",
+        "human-in-the-loop",
+        "tool use",
+        "multi-agent",
+        "planning",
+        "reasoning",
+        "chain-of-thought",
+        "in-context",
+        "agent",
+        "dialogue"
       ]
     },
     {
       "slug": "self-supervised",
       "name": "自监督与表征学习",
-      "group_name": "perception",
+      "group_name": "learning",
       "aliases": [
         "self-supervised",
+        "unsupervised",
+        "contrastive",
         "contrastive learning",
         "representation learning",
-        "feature representation",
-        "pretraining"
+        "pre-training",
+        "pre-trained",
+        "masked image modeling",
+        "clustering",
+        "embedding",
+        "feature learning",
+        "foundation model",
+        "consistency regularization",
+        "consistency",
+        "contrastive loss",
+        "augmentation strategy"
       ]
     },
     {
-      "slug": "domain-adaptation",
-      "name": "域适应与泛化",
-      "group_name": "perception",
+      "slug": "weakly-supervised",
+      "name": "弱监督与半监督",
+      "group_name": "learning",
       "aliases": [
-        "domain adaptation",
-        "target domain",
-        "domain gap",
-        "generalization"
+        "semi-supervised",
+        "weakly supervised",
+        "supervised",
+        "label noise",
+        "noisy label",
+        "pseudo label",
+        "annotation",
+        "active learning",
+        "few-shot learning",
+        "label"
       ]
     },
     {
-      "slug": "pose-estimation",
-      "name": "人体姿态与动作",
-      "group_name": "perception",
+      "slug": "training-strategy",
+      "name": "训练策略与微调",
+      "group_name": "learning",
       "aliases": [
-        "pose estimation",
-        "human pose",
-        "human motion",
-        "action recognition"
-      ]
-    },
-    {
-      "slug": "adversarial-robustness",
-      "name": "对抗鲁棒性",
-      "group_name": "perception",
-      "aliases": [
-        "adversarial attack",
-        "adversarial",
-        "robustness"
-      ]
-    },
-    {
-      "slug": "knowledge-distillation",
-      "name": "知识蒸馏与压缩",
-      "group_name": "perception",
-      "aliases": [
-        "knowledge distillation",
+        "fine-tuning",
+        "fine-tuning strategy",
+        "training strategy",
+        "curriculum",
         "distillation",
-        "model compression"
+        "knowledge distillation",
+        "self-training",
+        "prompt tuning",
+        "adapter",
+        "lora",
+        "optimization",
+        "learning rate",
+        "optimizer",
+        "scheduler",
+        "training data",
+        "data augmentation",
+        "augmentation"
+      ]
+    },
+    {
+      "slug": "architecture-attention",
+      "name": "网络架构与注意力",
+      "group_name": "learning",
+      "aliases": [
+        "transformer",
+        "attention",
+        "vision transformer",
+        "architecture",
+        "backbone",
+        "neural network",
+        "neural",
+        "convolution",
+        "convolutional",
+        "mlp",
+        "encoder",
+        "decoder",
+        "hierarchical",
+        "unified"
+      ]
+    },
+    {
+      "slug": "graph-structured",
+      "name": "图与结构化建模",
+      "group_name": "learning",
+      "aliases": [
+        "graph",
+        "graph neural network",
+        "gnn",
+        "scene graph",
+        "knowledge graph",
+        "hypergraph",
+        "relation",
+        "structured"
+      ]
+    },
+    {
+      "slug": "reinforcement-embodied",
+      "name": "强化学习与具身智能",
+      "group_name": "learning",
+      "aliases": [
+        "reinforcement learning",
+        "policy",
+        "reward",
+        "embodied",
+        "navigation",
+        "manipulation",
+        "robot",
+        "robotic",
+        "simulation",
+        "world model",
+        "simulator"
+      ]
+    },
+    {
+      "slug": "robustness-adversarial",
+      "name": "对抗攻击与鲁棒性",
+      "group_name": "robustness",
+      "aliases": [
+        "attack",
+        "adversarial",
+        "adversarial attack",
+        "robustness",
+        "robust",
+        "perturbation",
+        "backdoor",
+        "certified",
+        "safety",
+        "privacy",
+        "watermark",
+        "forgery",
+        "deepfake",
+        "anonymization",
+        "adversarial example",
+        "adversarial robustness",
+        "attack transfer"
+      ]
+    },
+    {
+      "slug": "efficiency",
+      "name": "高效推理与模型压缩",
+      "group_name": "efficiency",
+      "aliases": [
+        "efficiency",
+        "efficient",
+        "inference",
+        "quantization",
+        "pruning",
+        "sparse",
+        "latency",
+        "flops",
+        "parameter",
+        "lightweight",
+        "acceleration",
+        "cost",
+        "memory footprint",
+        "inference speed",
+        "throughput"
+      ]
+    },
+    {
+      "slug": "architecture-search",
+      "name": "架构搜索与自动化",
+      "group_name": "efficiency",
+      "aliases": [
+        "neural architecture search",
+        "search",
+        "automl",
+        "hyperparameter",
+        "scaling",
+        "autoencoder",
+        "automatic"
+      ]
+    },
+    {
+      "slug": "benchmark-evaluation",
+      "name": "基准与评测",
+      "group_name": "efficiency",
+      "aliases": [
+        "benchmark",
+        "evaluation",
+        "metric",
+        "leaderboard",
+        "dataset",
+        "human evaluation",
+        "survey",
+        "reproducibility",
+        "benchmark suite",
+        "evaluation protocol",
+        "zero-shot evaluation"
       ]
     },
     {
       "slug": "autonomous-driving",
-      "name": "自动驾驶感知",
-      "group_name": "perception",
+      "name": "自动驾驶与室外感知",
+      "group_name": "application",
       "aliases": [
         "autonomous driving",
         "driving",
-        "trajectory"
-      ]
-    },
-    {
-      "slug": "image-classification",
-      "name": "图像分类与识别",
-      "group_name": "perception",
-      "aliases": [
-        "image classification",
-        "classification",
-        "recognition"
-      ]
-    },
-    {
-      "slug": "image-quality",
-      "name": "图像复原与质量",
-      "group_name": "perception",
-      "aliases": [
-        "image quality",
-        "image restoration",
-        "super-resolution",
-        "denoising"
+        "autonomous",
+        "bev",
+        "perception",
+        "occupancy",
+        "motion planning",
+        "trajectory prediction",
+        "road",
+        "vehicle",
+        "traffic"
       ]
     },
     {
       "slug": "medical-imaging",
       "name": "医学影像",
-      "group_name": "perception",
+      "group_name": "application",
       "aliases": [
-        "medical image",
         "medical",
-        "clinical"
+        "medical image",
+        "medical imaging",
+        "clinical",
+        "ct",
+        "mri",
+        "histopathology",
+        "pathology",
+        "ultrasound",
+        "x-ray",
+        "retinal",
+        "brain",
+        "tumor",
+        "lesion",
+        "cell",
+        "nuclei",
+        "surgical",
+        "organ"
       ]
     },
     {
-      "slug": "efficiency",
-      "name": "效率与推理成本",
-      "group_name": "perception",
+      "slug": "remote-sensing",
+      "name": "遥感与对地观测",
+      "group_name": "application",
       "aliases": [
-        "inference time",
-        "computational cost",
-        "efficient",
-        "real-time"
+        "remote sensing",
+        "satellite",
+        "aerial",
+        "hyperspectral",
+        "pan-sharpening",
+        "land cover",
+        "earth observation",
+        "sar",
+        "multispectral"
       ]
     },
     {
-      "slug": "benchmark-evaluation",
-      "name": "评测与基准",
-      "group_name": "perception",
+      "slug": "document-ocr",
+      "name": "文档理解与文本识别",
+      "group_name": "application",
       "aliases": [
-        "benchmark",
-        "ground truth",
-        "evaluation protocol",
-        "metric"
+        "scene text",
+        "text recognition",
+        "ocr",
+        "document",
+        "handwriting",
+        "layout",
+        "chart",
+        "table",
+        "pdf",
+        "signature",
+        "document understanding"
       ]
     }
   ]
