@@ -4,3 +4,7 @@
 #            验证接口契约。Starlette 1.6 已弃用 httpx 并推荐 httpx2。
 pytest==8.4.2
 httpx2==2.13.0
+# pyarrow —— 仅在「导入完整论文集」（harvest_cli --datasets）时使用：
+#             直接解析 HuggingFace 数据集里的 parquet 文件，避免 datasets-server 的严格限额。
+#             生产运行不需要它：后端未安装时会自动回落到 JSON 分页接口。
+pyarrow>=17.0
