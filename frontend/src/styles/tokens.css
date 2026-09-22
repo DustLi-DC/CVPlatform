@@ -162,3 +162,18 @@ a {
   margin: 0 auto;
   padding: 0 var(--layout-padding);
 }
+
+/*
+ * 动效降级：系统里开启"减少动态效果"时，全站过渡与动画降到接近即时。
+ * 这里是兜底；图表（播放头滑行、入场动画）另有 JS 判断，见 TrendChart / AnimatedNumber。
+ */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
+}

@@ -39,14 +39,9 @@ echarts.use([
 export { echarts }
 
 /**
- * 把设计令牌（CSS 变量）解析为具体颜色值。
+ * 颜色解析从本模块转出（实现见 `./colors`）。
  *
- * canvas 不认识 `var(--x)`，图表组件必须先把变量解析成 `#rrggbb` 再交给 ECharts；
- * 解析失败时返回中性灰，不抛错——颜色拿不到不应让整张图渲染失败。
+ * 放在单独模块是因为 GIF 导出也要用它，而导出不该为了解析一个颜色就把整包 ECharts 拉进来。
+ * 这里保留转出，图表组件原有的 `import { resolveCssColor } from '../composables/echarts'` 不受影响。
  */
-export function resolveCssColor(color: string): string {
-  if (!color.startsWith('var(')) return color
-  const variable = color.slice(4, -1).trim()
-  const value = getComputedStyle(document.documentElement).getPropertyValue(variable).trim()
-  return value || '#94a3b8'
-}
+export { resolveCssColor } from './colors'

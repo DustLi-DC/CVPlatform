@@ -2,7 +2,20 @@
 /**
  * 榜单条目（Top 10 与年度 Top 10 演变共用）。
  * 原型的榜单是 HTML/CSS 实现，不使用图表库；条形宽度按当前列表最大值归一。
+ *
+ * 动画（本轮改造）：
+ * - **排名变化用 FLIP 过渡**：`TransitionGroup` 让行在位次互换时平移过去，而不是瞬间跳位——
+ *   「年度 Top 10 演变」里每年推进都会重排，这一项是页面上最明显的动效；
+ * - 条形宽度与排序用同一时长过渡，两个动作同步完成；
+ * - 计数用 `AnimatedNumber` 补间，年份切换时数字是"走"过去的；
+ * - **顺带修掉一个真实缺陷**：`maxCount` 原来是在 setup 里读一次 props 得到的普通常量，
+ *   不随数据变化——榜单更新后归一化基准还停在上一次，条长会与实际占比不符。
+ *   这里改成 `computed`，随 items 重算。
  */
+import { computed } from 'vue'
+
+import AnimatedNumber from './AnimatedNumber.vue'
+
 export interface RankItem {
   key: string
   label: string
@@ -30,10 +43,11 @@ const emit = defineEmits<{
   select: [item: RankItem]
 }>()
 
-const maxCount = Math.max(...props.items.map((item) => item.count), 1)
+/** 归一化基准必须随数据重算：写成普通常量会让榜单更新后条长失真 */
+const maxCount = computed(() => Math.max(...props.items.map((item) => item.count), 1))
 
 function barWidth(count: number): string {
-  const ratio = Math.round((count / maxCount) * 100)
+  const ratio = Math.round((count / maxCount.value) * 100)
   return `${Math.max(props.minBarPercent, ratio)}%`
 }
 
@@ -44,7 +58,7 @@ function onSelect(item: RankItem): void {
 </script>
 
 <template>
-  <ol class="rank-list">
+  <TransitionGroup tag="ol" name="rank" class="rank-list">
     <li v-for="(item, index) in items" :key="item.key">
       <component
         :is="interactive ? 'button' : 'div'"
@@ -57,7 +71,9 @@ function onSelect(item: RankItem): void {
         <span class="rank-main">
           <span class="rank-line">
             <span class="rank-label">{{ item.label }}</span>
-            <span class="rank-count">{{ item.count }} {{ unit }}</span>
+            <span class="rank-count">
+              <AnimatedNumber :value="item.count" /> {{ unit }}
+            </span>
           </span>
           <span class="rank-track">
             <span
@@ -68,11 +84,12 @@ function onSelect(item: RankItem): void {
         </span>
       </component>
     </li>
-  </ol>
+  </TransitionGroup>
 </template>
 
 <style scoped>
 .rank-list {
+  position: relative;
   padding: 8px 12px;
 }
 
@@ -154,5 +171,36 @@ button.rank-row:hover {
   display: block;
   height: 8px;
   border-radius: 999px;
+  /* 与行的位移用同一时长与缓动，宽度和排序同时收尾 */
+  transition:
+    width 520ms cubic-bezier(0.22, 0.61, 0.36, 1),
+    background-color 300ms ease;
+}
+
+/* 位次互换：整行平移过去（FLIP），而不是瞬间跳位 */
+.rank-move {
+  transition: transform 520ms cubic-bezier(0.22, 0.61, 0.36, 1);
+}
+
+.rank-enter-active,
+.rank-leave-active {
+  transition:
+    opacity 280ms ease,
+    transform 280ms ease;
+}
+
+.rank-enter-from,
+.rank-leave-to {
+  opacity: 0;
+  transform: translateY(-6px);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .rank-bar,
+  .rank-move,
+  .rank-enter-active,
+  .rank-leave-active {
+    transition: none;
+  }
 }
 </style>

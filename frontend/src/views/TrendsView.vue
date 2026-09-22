@@ -17,6 +17,7 @@
 import { computed, defineAsyncComponent, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { RouterLink, useRoute } from 'vue-router'
 
+import AnimatedNumber from '../components/AnimatedNumber.vue'
 import ChartContainer from '../components/ChartContainer.vue'
 import ConferenceChips from '../components/ConferenceChips.vue'
 import PageHeader from '../components/PageHeader.vue'
@@ -25,10 +26,12 @@ import YearRangeSelect from '../components/YearRangeSelect.vue'
 import type { TrendLine } from '../components/TrendChart.vue'
 import { ApiError } from '../api/paperApi'
 import { useAvailableYears } from '../composables/useAvailableYears'
+import { GIF_FPS } from '../composables/trendLayout'
+// 只引类型：`import type` 编译后会被完全抹掉，不会把合成模块拉进主包
+import type { RankSnapshot } from '../composables/gifExport'
 import { fetchSummary, fetchTop, fetchTrend } from '../api/statsApi'
 import { allConferences, conferenceColors, type Conference } from '../types/paper'
 import {
-  formatShare,
   groupColor,
   type StatsItem,
   type StatsSummary,
@@ -442,6 +445,136 @@ function onSelectYear(year: number): void {
   setYear(year)
 }
 
+/** 图表组件对外暴露的导出接口（见 TrendChart 的 defineExpose） */
+interface TrendChartHandle {
+  getChartCanvas: () => HTMLCanvasElement | null
+  getPlayheadX: () => number | null
+}
+
+/** 导出 GIF 需要的两块东西：图表画布与播放头当前位置，都由图表组件给出 */
+const trendChartRef = ref<TrendChartHandle | null>(null)
+/** 榜单视图的卡片根节点：榜单是 DOM/CSS 画的、没有画布，导出时从它读行状态 */
+const rankCardRef = ref<HTMLElement | null>(null)
+const gifExporting = ref(false)
+const gifStatus = ref('')
+const gifError = ref('')
+
+/**
+ * 从起始年份重播一遍，按固定帧率回调采样。
+ *
+ * 导出用的是一次真实播放，因此 GIF 里的生长与过渡与页面上看到的一致；
+ * 播放结束可能落在两次采样之间，收尾时补采一帧，保证 GIF 以最终状态结束。
+ */
+async function capturePlayback(firstYear: number, onSample: () => void): Promise<void> {
+  stopPlay()
+  setYear(firstYear)
+  play()
+  // 安全上限：正常一次播放约 6 秒 × 10fps，给足余量即可
+  const maxFrames = 400
+  let count = 0
+  await new Promise<void>((resolve) => {
+    const timer = window.setInterval(() => {
+      onSample()
+      count += 1
+      gifStatus.value = `正在采集 · 第 ${count} 帧`
+      if (!playing.value || count >= maxFrames) {
+        window.clearInterval(timer)
+        resolve()
+      }
+    }, 1000 / GIF_FPS)
+  })
+  onSample()
+}
+
+/**
+ * 导出当前视图的动画为 GIF。
+ *
+ * 两个视图各有一条合成路径：热度趋势曲线是「图表画布 + 手绘播放头 + 说明栏」；
+ * 年度 Top 10 演变没有画布，改为逐帧读榜单行状态再手绘
+ * （合成细节见 composables/gifExport.ts）。导出期间锁住筛选区与视图切换，
+ * 结束后停播并恢复导出前的年份。
+ */
+async function exportGif(): Promise<void> {
+  if (gifExporting.value) return
+  const rankMode = view.value === 'rank'
+  const firstYear = yearFrom.value
+  const lastYear = yearTo.value
+  const chart = trendChartRef.value
+  const chartCanvas = chart?.getChartCanvas() ?? null
+  const rankCard = rankCardRef.value
+  const ready = rankMode
+    ? Boolean(rankCard && rankItems.value.length)
+    : Boolean(chart && chartCanvas && trendLines.value.length)
+  if (!ready || firstYear === null || lastYear === null) {
+    gifError.value = rankMode
+      ? `${currentYearText.value} 年没有可导出的榜单，请换一年或调整筛选后再试。`
+      : '请先选择研究对象与年份范围，再导出 GIF。'
+    return
+  }
+  gifExporting.value = true
+  gifError.value = ''
+  gifStatus.value = '正在准备…'
+  const previousYear = currentYear.value
+  try {
+    // 编码器与合成函数按需加载：只有点导出时才下载这段代码
+    const { composeFrame, composeRankFrame, encodeGif, downloadBlob, readRankSnapshot } =
+      await import('../composables/gifExport')
+
+    let frames: HTMLCanvasElement[]
+    if (rankMode && rankCard) {
+      // 榜单：先逐帧读快照（含过渡中的条宽与行位），再统一绘制成同尺寸画布
+      const host: HTMLElement = rankCard
+      const snapshots: RankSnapshot[] = []
+      await capturePlayback(firstYear, () => {
+        const snapshot = readRankSnapshot(host, {
+          title: '年度 Top 10 演变',
+          year: currentYearText.value,
+        })
+        if (snapshot) snapshots.push(snapshot)
+      })
+      frames = snapshots.map(composeRankFrame)
+    } else if (chart && chartCanvas) {
+      // 曲线：合成图表画布 + 播放头 + 说明栏
+      const caption = () => ({
+        title: comparedKeys.value.map((series) => series.name).join(' / ') || '热度走势',
+        year: currentYearText.value,
+        unit: unit.value,
+        legend: conferences.value.map((item) => ({ label: item, color: conferenceColors[item] })),
+      })
+      const collected: HTMLCanvasElement[] = []
+      await capturePlayback(firstYear, () => {
+        collected.push(
+          composeFrame({ canvas: chartCanvas, playheadX: chart.getPlayheadX() }, caption()),
+        )
+      })
+      frames = collected
+    } else {
+      throw new Error('当前视图没有可导出的内容')
+    }
+    if (!frames.length) throw new Error('没有采集到任何帧')
+
+    gifStatus.value = `正在编码 · 0/${frames.length} 帧`
+    const blob = await encodeGif(frames, {
+      fps: GIF_FPS,
+      onProgress: (done, total) => {
+        gifStatus.value = `正在编码 · ${done}/${total} 帧`
+      },
+    })
+    const prefix = rankMode ? 'rank' : `trend-${primaryKey.value?.key ?? 'topic'}`
+    downloadBlob(blob, `cvplatform-${prefix}-${firstYear}-${lastYear}.gif`)
+    gifStatus.value = `已导出 ${frames.length} 帧 · ${(blob.size / 1024 / 1024).toFixed(1)} MB`
+  } catch (error) {
+    console.error('导出 GIF 失败：', error)
+    gifError.value = `导出 GIF 失败：${error instanceof Error ? error.message : String(error)}`
+    gifStatus.value = ''
+  } finally {
+    // 无论成败都收尾：停播、恢复导出前的年份、解锁控件
+    stopPlay()
+    if (previousYear !== null) setYear(previousYear)
+    gifExporting.value = false
+  }
+}
+
 /** 下拉框选择：新选的放最前（作为对照的主对象），下拉框自身复位为空 */
 function onPickKey(event: Event): void {
   const select = event.target as HTMLSelectElement
@@ -535,7 +668,7 @@ watch(() => route.query.kw, applyRouteQuery)
       </template>
     </PageHeader>
 
-    <section class="card filter-card">
+    <section class="card filter-card" :class="{ 'is-locked': gifExporting }">
       <div class="filter-row">
         <div class="topic-field">
           <label class="field-label" for="topic-select">
@@ -611,14 +744,39 @@ watch(() => route.query.kw, applyRouteQuery)
         </div>
 
         <div class="play-controls">
-          <button type="button" class="btn btn-primary" @click="togglePlay">
+          <button type="button" class="btn btn-primary" :disabled="gifExporting" @click="togglePlay">
             {{ playButtonText }}
           </button>
-          <button type="button" class="btn btn-secondary" :disabled="!playing" @click="stopPlay">
+          <button
+            type="button"
+            class="btn btn-secondary"
+            :disabled="!playing || gifExporting"
+            @click="stopPlay"
+          >
             暂停
           </button>
-          <button type="button" class="btn btn-secondary" @click="replay">重播</button>
+          <button type="button" class="btn btn-secondary" :disabled="gifExporting" @click="replay">
+            重播
+          </button>
+          <button
+            type="button"
+            class="btn btn-secondary"
+            :disabled="gifExporting || (view === 'trend' ? !comparedKeys.length : !rankItems.length)"
+            :title="`把当前视图的动画导出为 GIF：从起始年份重播一遍并逐帧采集（${GIF_FPS} 帧/秒）`"
+            @click="exportGif"
+          >
+            {{ gifExporting ? '导出中…' : '导出 GIF' }}
+          </button>
         </div>
+
+        <p
+          v-if="gifError || gifStatus"
+          class="gif-status"
+          :class="{ 'is-error': Boolean(gifError) }"
+          role="status"
+        >
+          {{ gifError || gifStatus }}
+        </p>
       </div>
 
       <div class="progress-row">
@@ -630,6 +788,7 @@ watch(() => route.query.kw, applyRouteQuery)
               :class="{
                 'is-current': year === currentYear,
                 'is-done': currentYear !== null && year < currentYear,
+                'is-ticking': playing && year === currentYear,
               }"
               @click="onSelectYear(year)"
             >
@@ -639,7 +798,14 @@ watch(() => route.query.kw, applyRouteQuery)
           </li>
         </ol>
         <div class="current-year">
-          当前年份：<strong>{{ currentYearText }}</strong>
+          <span class="current-year-label">
+            <span v-if="playing" class="live-dot" aria-hidden="true"></span>
+            当前年份：
+          </span>
+          <!-- 年份切换走过渡：数字滑入替换，避免整块文字"闪一下" -->
+          <Transition name="year-swap" mode="out-in">
+            <strong :key="currentYearText">{{ currentYearText }}</strong>
+          </Transition>
           <span class="current-hint">（点年份格或曲线上的数据点可直接定位）</span>
         </div>
       </div>
@@ -657,6 +823,7 @@ watch(() => route.query.kw, applyRouteQuery)
         type="button"
         class="tab-btn"
         :class="{ 'is-on': view === 'trend' }"
+        :disabled="gifExporting"
         @click="switchView('trend')"
       >
         热度趋势曲线
@@ -665,6 +832,7 @@ watch(() => route.query.kw, applyRouteQuery)
         type="button"
         class="tab-btn"
         :class="{ 'is-on': view === 'rank' }"
+        :disabled="gifExporting"
         @click="switchView('rank')"
       >
         年度 Top 10 演变
@@ -682,10 +850,12 @@ watch(() => route.query.kw, applyRouteQuery)
       >
         <TrendChart
           v-if="trendLines.length"
+          ref="trendChartRef"
           :years="trend?.years ?? []"
           :lines="trendLines"
           :unit="unit"
           :current-year="currentYear"
+          :playing="playing"
           height="430px"
           @select-year="onSelectYear"
         />
@@ -783,8 +953,9 @@ watch(() => route.query.kw, applyRouteQuery)
                     </span>
                     <span v-else-if="cell.point.reason === 'out_of_scope'" class="sample-none">—</span>
                     <span v-else class="sample-value">
-                      {{ cell.point.count }} / {{ cell.point.denominator }} 篇 ·
-                      <strong>{{ formatShare(cell.point.share) }}</strong>
+                      <AnimatedNumber :value="cell.point.count" /> /
+                      <AnimatedNumber :value="cell.point.denominator" /> 篇 ·
+                      <strong><AnimatedNumber :value="cell.point.share" :digits="2" />%</strong>
                     </span>
                   </td>
                 </tr>
@@ -820,7 +991,7 @@ watch(() => route.query.kw, applyRouteQuery)
       </div>
     </section>
 
-    <section v-else class="card rank-card">
+    <section v-else ref="rankCardRef" class="card rank-card">
       <div class="card-header">
         <div>
           <h2 class="card-title">年度 Top 10 演变</h2>
@@ -1113,6 +1284,11 @@ watch(() => route.query.kw, applyRouteQuery)
   font-size: 11px;
   text-align: left;
   cursor: pointer;
+  transition:
+    border-color 240ms ease,
+    background-color 240ms ease,
+    color 240ms ease,
+    box-shadow 240ms ease;
 }
 
 .year-cell.is-done {
@@ -1126,19 +1302,49 @@ watch(() => route.query.kw, applyRouteQuery)
   background: var(--color-primary-soft);
   color: var(--color-primary);
   font-weight: 600;
+  /* 当前格加一圈很淡的外发光，让位置在整排格子里一眼可见 */
+  box-shadow: 0 0 0 3px rgb(29 78 216 / 8%);
 }
 
 .year-bar {
+  position: relative;
   display: block;
   height: 6px;
   margin-top: 4px;
   border-radius: 999px;
+  overflow: hidden;
   background: var(--color-inactive);
+  transition: background-color 240ms ease;
 }
 
 .year-cell.is-done .year-bar,
 .year-cell.is-current .year-bar {
   background: var(--color-primary);
+}
+
+/*
+ * 播放中的当前年份：条内有一道浅色扫光按 900ms 走完一格，
+ * 与播放步长同周期——视觉上就是"距离下一年还有多久"。
+ */
+.year-cell.is-ticking .year-bar::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: 0;
+  background: rgb(255 255 255 / 55%);
+  animation: year-tick 900ms linear infinite;
+}
+
+@keyframes year-tick {
+  from {
+    width: 0;
+  }
+
+  to {
+    width: 100%;
+  }
 }
 
 .current-year {
@@ -1150,8 +1356,94 @@ watch(() => route.query.kw, applyRouteQuery)
 }
 
 .current-year strong {
+  display: inline-block;
   color: var(--color-primary);
   font-size: 16px;
+}
+
+/* 播放中的"时间在走"提示：一颗呼吸的小圆点 */
+.live-dot {
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  margin-right: 6px;
+  border-radius: 50%;
+  background: var(--color-primary);
+  vertical-align: middle;
+  animation: live-dot 900ms ease-in-out infinite;
+}
+
+@keyframes live-dot {
+  0%,
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+
+  50% {
+    opacity: 0.4;
+    transform: scale(0.75);
+  }
+}
+
+/* 年份数字切换：旧的向上淡出、新的自下淡入（out-in 保证不重叠） */
+.year-swap-enter-active,
+.year-swap-leave-active {
+  transition:
+    opacity 180ms ease,
+    transform 220ms cubic-bezier(0.22, 0.61, 0.36, 1);
+}
+
+.year-swap-enter-from {
+  opacity: 0;
+  transform: translateY(8px);
+}
+
+.year-swap-leave-to {
+  opacity: 0;
+  transform: translateY(-8px);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .year-cell,
+  .year-bar,
+  .live-dot,
+  .year-swap-enter-active,
+  .year-swap-leave-active,
+  .year-cell.is-ticking .year-bar::after {
+    animation: none;
+    transition: none;
+  }
+}
+
+/*
+ * 导出 GIF 期间锁住筛选区：采集由一次真实播放驱动，
+ * 中途改主题/会议/年份或者切视图，会得到混合了两种数据的 GIF 甚至让图表被卸载。
+ */
+.filter-card.is-locked {
+  pointer-events: none;
+}
+
+.filter-card.is-locked .filter-row {
+  opacity: 0.85;
+}
+
+/* 导出进度与错误提示：单独占一行，紧跟在播放控件下方 */
+.gif-status {
+  flex-basis: 100%;
+  margin-top: 4px;
+  font-size: 12px;
+  color: var(--color-text-subtle);
+}
+
+.gif-status.is-error {
+  color: var(--color-danger-text);
+}
+
+.tab-btn:disabled,
+.year-cell:disabled {
+  cursor: default;
+  opacity: 0.6;
 }
 
 .view-tabs {

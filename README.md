@@ -24,7 +24,8 @@
 ## 技术栈与运行形态
 
 - 后端：Python 3.12、FastAPI、Uvicorn、SQLModel、SQLite（WAL）；**单 worker**，后台任务单线程串行执行。
-- 前端：Vue 3、TypeScript、Vite、Vue Router、ECharts（按需注册、异步加载）。
+- 前端：Vue 3、TypeScript、Vite、Vue Router、ECharts（按需注册、异步加载）、
+  gifenc（MIT、无传递依赖，**仅在点「导出 GIF」时**动态加载，首屏与主包不携带）。
 - 生产：华为云 Ubuntu 24.04（2 核 / 2 GB / 2 Mbps），代码放 `/opt/cvplatform`，
   数据库放 `/var/lib/cvplatform`，systemd 服务 `cvplatform.service`，
   Nginx 提供前端静态文件并把 `/api/` 反向代理到 `127.0.0.1:8000`。
