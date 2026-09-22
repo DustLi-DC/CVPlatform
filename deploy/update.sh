@@ -158,6 +158,17 @@ else
 fi
 
 log "6/7 重启服务"
+# 先确认服务会读到生产数据库：旧部署的单元可能没设 CVPLATFORM_ENV/CVPLATFORM_DB_PATH，
+# 那样应用会退回「应用目录/data」的开发默认路径，而该目录属主是 root → 启动即 PermissionError。
+UNIT_ENV="$(systemctl show "$SERVICE" -p Environment --value 2>/dev/null || true)"
+UNIT_ENVFILES="$(systemctl show "$SERVICE" -p EnvironmentFiles --value 2>/dev/null || true)"
+if [[ "$UNIT_ENV" != *"CVPLATFORM_ENV=production"* && "$UNIT_ENV" != *"CVPLATFORM_DB_PATH="* && "$UNIT_ENVFILES" != *"/etc/cvplatform.env"* ]]; then
+  echo "  !! 服务未配置生产环境变量（Environment/EnvironmentFile 里都没有 CVPLATFORM_ENV 或 CVPLATFORM_DB_PATH）"
+  echo "     继续启动会退回开发默认路径并因权限失败。请先执行："
+  echo "       sudo bash $RELEASE_DIR/deploy/setup_service_env.sh"
+  echo "       sudo systemctl daemon-reload && sudo systemctl restart $SERVICE"
+  fail "缺少生产环境变量配置，已在启动前中止（代码与数据库均已备份）"
+fi
 run "systemctl daemon-reload"
 run "systemctl restart $SERVICE"
 run "sleep 3"
