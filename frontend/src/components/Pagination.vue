@@ -31,7 +31,7 @@ function go(target: number): void {
 
 <template>
   <div class="pager-bar">
-    <span class="pager-hint">{{ pageSizeHint }} · 共 {{ total }} 条（演示数据）</span>
+    <span class="pager-hint">{{ pageSizeHint }} · 共 {{ total }} 条</span>
     <nav class="pager" aria-label="分页">
       <button
         type="button"

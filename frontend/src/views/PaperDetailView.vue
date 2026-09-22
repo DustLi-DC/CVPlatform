@@ -58,6 +58,14 @@ const sourceNames = computed(() => {
 })
 
 /** 该系统关键词已归并到主题的数量，用于说明统计口径的适用范围 */
+/** 该论文归并到的主题标识（取第一个，用于跳到趋势页比较该方向） */
+const primaryTopicKey = computed(() => {
+  const mapped = paper.value?.keywords.find(
+    (item) => item.origin === 'system' && item.topic,
+  )
+  return mapped?.topic ?? null
+})
+
 const mappedSystemCount = computed(
   () =>
     (paper.value?.keywords ?? []).filter(
@@ -329,14 +337,20 @@ watch(paperId, () => void load(), { immediate: true })
 
           <section class="card side-card">
             <h2 class="side-title">该论文所属方向热度</h2>
-            <p class="side-empty">
-              所属方向热度需要统计接口，将在阶段 8 接入；本阶段不显示演示数值。
-            </p>
             <p v-if="mappedSystemCount" class="side-hint">
-              该论文已有 {{ mappedSystemCount }} 个系统关键词归并到主题，届时可直接查看对应方向的热度与走势。
+              该论文有 {{ mappedSystemCount }} 个系统关键词已归并到主题。
+              主题热度按「该会议年份中包含该主题的论文数 ÷ 当年纳入分析的论文总数」计算，
+              可在总览页看到当前范围的榜单与图谱。
             </p>
-            <RouterLink class="btn btn-secondary btn-block side-action" to="/trends">
-              查看热度走势对比
+            <p v-else class="side-empty">
+              该论文的系统关键词尚未归并到任何主题（未归类），因此不参与主题热度统计；
+              关键词方法见「关于平台」。
+            </p>
+            <RouterLink
+              class="btn btn-secondary btn-block side-action"
+              :to="{ path: '/trends', query: { kw: primaryTopicKey ?? undefined } }"
+            >
+              查看该方向的热度走势
             </RouterLink>
           </section>
 

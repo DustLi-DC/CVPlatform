@@ -32,7 +32,10 @@ watch(() => route.fullPath, checkConnection)
   <footer class="site-footer">
     <div class="layout-container footer-inner">
       <div class="footer-left">
-        <span>CVPlatform · 课程项目 · 页面数值均为演示数据，不可作为研究结论引用。</span>
+        <span>
+          CVPlatform · 课程项目 · 页面数值来自平台自采样本（每会议年份 200 篇），
+          只描述该样本，不等同于整届大会或领域结论。
+        </span>
       </div>
       <div class="footer-right">
         <span class="conn" role="status">

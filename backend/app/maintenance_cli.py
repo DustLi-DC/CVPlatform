@@ -86,6 +86,28 @@ def _reload_topics() -> int:
     return 0
 
 
+def _import_dataset(path_text: str) -> int:
+    """导入课程数据集 / 可分发样例（JSON），复用统一的清洗、去重与关键词逻辑。"""
+    from pathlib import Path as _Path
+
+    from .services import adapters
+
+    path = _Path(path_text).expanduser().resolve()
+    if not path.exists():
+        print(f"文件不存在：{path}")
+        return 1
+    records = adapters.load_records(path)
+    with session_scope() as session:
+        result = adapters.import_records(session, records)
+    print(
+        f"导入完成：共 {result.total} 条，新建 {result.created}，更新 {result.updated}，"
+        f"跳过 {result.skipped}"
+    )
+    for title, reason in result.failures[:10]:
+        print(f"  跳过：{title[:60]} —— {reason}")
+    return 0
+
+
 def _verify_stats(top: int, repeats: int) -> int:
     """用独立写的 SQL 复算统计结果，并测量各接口的耗时与内存峰值。
 
@@ -285,6 +307,8 @@ def main(argv: list[str] | None = None) -> int:
     process.add_argument("--limit", type=int, default=None, help="本次最多处理多少篇")
     process.add_argument("--force", action="store_true", help="忽略状态与版本，对语料全量重算")
     sub.add_parser("reload-topics", help="重新载入主题表并重算关键词的主题映射")
+    dataset = sub.add_parser("import-dataset", help="导入课程数据集或可分发样例（JSON）")
+    dataset.add_argument("path", help="数据集文件路径，如 deploy/sample/cvplatform_sample.json")
     verify = sub.add_parser("verify-stats", help="用独立 SQL 复算统计结果并测量耗时内存")
     verify.add_argument("--top", type=int, default=10, help="复算的榜单条数")
     verify.add_argument("--repeats", type=int, default=3, help="耗时测量轮数")
@@ -305,6 +329,8 @@ def main(argv: list[str] | None = None) -> int:
         return _process_keywords(args.limit, args.force)
     if args.command == "reload-topics":
         return _reload_topics()
+    if args.command == "import-dataset":
+        return _import_dataset(args.path)
     if args.command == "verify-stats":
         return _verify_stats(args.top, args.repeats)
     parser.print_help()
