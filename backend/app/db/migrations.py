@@ -338,15 +338,16 @@ def initialize_database(
         for migration in pending:
             _apply_migration(conn, migration)
 
-        # 首次初始化时写入运行所需的初始配置
+        # 规则版本以代码为唯一来源：每次初始化都同步到 meta，
+        # 否则提升版本后视图仍按旧版本过滤，刚处理完的论文反而进不了分析集合。
         conn.execute(
             "INSERT INTO meta (key, value) VALUES ('keyword_ruleset_version', ?) "
-            "ON CONFLICT (key) DO NOTHING",
+            "ON CONFLICT (key) DO UPDATE SET value = excluded.value",
             (KEYWORD_RULESET_VERSION,),
         )
         conn.execute(
             "INSERT INTO meta (key, value) VALUES ('topic_ruleset_version', ?) "
-            "ON CONFLICT (key) DO NOTHING",
+            "ON CONFLICT (key) DO UPDATE SET value = excluded.value",
             (TOPIC_RULESET_VERSION,),
         )
         conn.commit()

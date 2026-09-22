@@ -28,8 +28,9 @@ DATA_STATUSES: tuple[str, ...] = ("complete", "review", "failed")
 ABSTRACT_STATUSES: tuple[str, ...] = ("present", "missing")
 KEYWORD_STATUSES: tuple[str, ...] = ("pending", "running", "done", "failed")
 
-# 关键词规则版本：规则、停用词或阈值变化时必须同步提升
-KEYWORD_RULESET_VERSION = "kw-v1"
+# 关键词规则版本：规则、停用词或阈值变化时必须同步提升。
+# kw-v2：修正单复数归一（不再把 across / analysis 这类词去掉尾部 s）
+KEYWORD_RULESET_VERSION = "kw-v2"
 TOPIC_RULESET_VERSION = "topic-v0"
 
 # 分析集合要求的最小标题长度（归一化后）

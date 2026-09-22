@@ -14,7 +14,12 @@ from pathlib import Path
 import pytest
 from sqlmodel import SQLModel, text
 
-from app.config import CONFERENCES, environment, resolve_database_path
+from app.config import (
+    CONFERENCES,
+    KEYWORD_RULESET_VERSION,
+    environment,
+    resolve_database_path,
+)
 from app.db.migrations import (
     LATEST_VERSION,
     MIGRATIONS,
@@ -75,7 +80,7 @@ def test_analysis_views_respect_keyword_status(temp_db: Path):
         code="CVPR-2024-0001",
         title="Title Done",
         keyword_status="done",
-        keyword_ruleset_version="kw-v1",
+        keyword_ruleset_version=KEYWORD_RULESET_VERSION,
     )
     pending = insert_paper(temp_db, code="CVPR-2024-0002", title="Title Pending")
     stale = insert_paper(
@@ -105,16 +110,19 @@ def test_analysis_keyword_view_filters_origin_and_version(temp_db: Path):
         temp_db,
         title="Title One Long",
         keyword_status="done",
-        keyword_ruleset_version="kw-v1",
+        keyword_ruleset_version=KEYWORD_RULESET_VERSION,
     )
     add_system_keyword(
-        temp_db, paper_id=paper_id, name="system current", version="kw-v1"
+        temp_db,
+        paper_id=paper_id,
+        name="system current",
+        version=KEYWORD_RULESET_VERSION,
     )
     add_system_keyword(
         temp_db,
         paper_id=paper_id,
         name="author current",
-        version="kw-v1",
+        version=KEYWORD_RULESET_VERSION,
     )
     add_system_keyword(
         temp_db, paper_id=paper_id, name="system old", version="kw-v0"

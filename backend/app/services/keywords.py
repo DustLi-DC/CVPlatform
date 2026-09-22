@@ -32,7 +32,23 @@ _CANONICAL_REPLACEMENTS: tuple[tuple[str, str], ...] = (
 
 _NON_WORD = re.compile(r"[^\w\s\-+]", re.UNICODE)
 _SPACES = re.compile(r"\s+")
-_PLURAL = re.compile(r"\b(\w{4,})s\b")
+# 以这些结尾的词不是复数；去掉尾部 s 会把词改坏（across→acros、analysis→analysi）
+_NOT_PLURAL = re.compile(r"(ss|us|is|os|as)$")
+
+
+def _singularize(token: str) -> str:
+    """保守的单复数归一：只在有把握时去复数。
+
+    宁可少归并，也不要把词改坏——归一形式是 keyword 表的唯一键，
+    一旦把 across 变成 acros，详情页与图谱上显示的就是错词。
+    """
+    if len(token) < 4 or not token.endswith("s"):
+        return token
+    if _NOT_PLURAL.search(token):
+        return token
+    if token.endswith("ies"):
+        return f"{token[:-3]}y"
+    return token[:-1]
 
 
 def _now() -> str:
@@ -58,7 +74,8 @@ def normalize_keyword(name: str) -> str:
         text = re.sub(pattern, replacement, text)
     text = text.replace("_", " ")
     text = _NON_WORD.sub(" ", text)
-    text = _PLURAL.sub(r"\1", text)
+    # 逐词归一单复数，避免对整串做正则替换把 across 之类的词改坏
+    text = " ".join(_singularize(token) for token in text.split())
     text = _SPACES.sub(" ", text).strip(" -")
     return text
 

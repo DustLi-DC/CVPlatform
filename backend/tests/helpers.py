@@ -12,6 +12,8 @@ from contextlib import contextmanager
 from pathlib import Path
 from typing import Any
 
+from app.config import KEYWORD_RULESET_VERSION
+
 # 固定时间戳：让构造出来的行具有确定的时间字段，便于排查
 NOW = "2026-01-01T00:00:00Z"
 
@@ -100,7 +102,7 @@ def link_keyword(
     *,
     paper_id: int,
     keyword_id: int,
-    version: str = "kw-v1",
+    version: str = KEYWORD_RULESET_VERSION,
 ) -> None:
     """建立论文与关键词的关系。"""
     with connect(db_path) as connection:
@@ -116,7 +118,7 @@ def add_system_keyword(
     *,
     paper_id: int,
     name: str,
-    version: str = "kw-v1",
+    version: str = KEYWORD_RULESET_VERSION,
     topic_id: int | None = None,
 ) -> int:
     """插入系统关键词并关联到论文，返回关键词 id。"""

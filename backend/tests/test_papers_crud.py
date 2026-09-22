@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from app.config import KEYWORD_RULESET_VERSION
 from app.services.papers import build_dedup_key, normalize_title
 
 from .helpers import add_system_keyword, count_rows, set_meta
@@ -152,9 +153,12 @@ def test_update_title_invalidates_system_keywords(client, paper_factory, temp_db
     paper = paper_factory("Original Title Of A Long Paper")
     # 模拟阶段 5 已抽取系统关键词：直接写库，验证修改后会被清理
     add_system_keyword(
-        temp_db, paper_id=paper["id"], name="object detection", version="kw-v1"
+        temp_db,
+        paper_id=paper["id"],
+        name="object detection",
+        version=KEYWORD_RULESET_VERSION,
     )
-    set_meta(temp_db, "keyword_ruleset_version", "kw-v1")
+    set_meta(temp_db, "keyword_ruleset_version", KEYWORD_RULESET_VERSION)
     assert client.get(f"/api/papers/{paper['id']}").json()["system_keywords"] == [
         "object detection"
     ]

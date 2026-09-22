@@ -18,6 +18,8 @@ import sys
 import threading
 from pathlib import Path
 
+from app.config import KEYWORD_RULESET_VERSION
+
 from .helpers import (
     add_system_keyword,
     count_rows,
@@ -366,7 +368,10 @@ def test_keywords_only_return_current_version(client, paper_factory, temp_db):
     """重算后详情只能看到当前版本的词，不能混入上一版已淘汰的词。"""
     paper = paper_factory("A Paper That Gets Reprocessed By Keyword Rules")
     add_system_keyword(
-        temp_db, paper_id=paper["id"], name="current version term", version="kw-v1"
+        temp_db,
+        paper_id=paper["id"],
+        name="current version term",
+        version=KEYWORD_RULESET_VERSION,
     )
     add_system_keyword(
         temp_db, paper_id=paper["id"], name="retired old term", version="kw-v0"
@@ -384,7 +389,10 @@ def test_keywords_are_not_duplicated_across_versions(client, paper_factory, temp
     """同一个词同时存在于两个版本时，标签只能出现一次。"""
     paper = paper_factory("A Paper With The Same Term In Two Versions")
     add_system_keyword(
-        temp_db, paper_id=paper["id"], name="shared term", version="kw-v1"
+        temp_db,
+        paper_id=paper["id"],
+        name="shared term",
+        version=KEYWORD_RULESET_VERSION,
     )
     add_system_keyword(
         temp_db, paper_id=paper["id"], name="shared term", version="kw-v0"
@@ -398,8 +406,11 @@ def test_keywords_are_not_duplicated_across_versions(client, paper_factory, temp
 def test_author_keywords_survive_version_bump(client, paper_factory, temp_db):
     """作者关键词来自来源数据，与抽取规则版本无关，换版本后仍应展示。"""
     paper = paper_factory("An Author Keyword Paper", source_keywords=["来源关键词"])
-    # 模拟规则版本升级：作者关键词的 ruleset_version 仍是写入时的旧值
-    set_meta(temp_db, "keyword_ruleset_version", "kw-v2")
+    # 模拟规则版本升级：把 meta 的当前版本改成一个与写入时不同的值，
+    # 作者关键词的行仍记录着写入时的版本
+    bumped = f"{KEYWORD_RULESET_VERSION}-next"
+    set_meta(temp_db, "keyword_ruleset_version", bumped)
+    assert bumped != KEYWORD_RULESET_VERSION
 
     detail = client.get(f"/api/papers/{paper['id']}").json()
     author_names = [
