@@ -2,9 +2,9 @@
 /**
  * 图表容器。
  *
- * 阶段 2 只提供容器：标题、副标题、单位、图例、固定高度与溢出约束，以及明确的
- * “待阶段 8/9 接入 ECharts”占位说明。原型的图表本身由 ECharts 渲染，按阶段拆分
- * 在阶段 8（图谱）与阶段 9（趋势动画）接入，此处不提前引入依赖，也不画假图表。
+ * 容器负责标题、副标题、单位、图例、图表区高度与溢出约束，并提供两处插槽：
+ * 默认插槽放图表本身（阶段 8 起放 ECharts 实例所在的组件），`tools` 插槽放图表级控件
+ * （例如图谱的节点上限与最小共现）。容器本身不引入图表库，也不画占位假图。
  */
 withDefaults(
   defineProps<{
@@ -15,12 +15,12 @@ withDefaults(
     /** 图表区高度，原型为 430px（图谱）与 400px（趋势） */
     height?: string
     legend?: { label: string; color: string; shape?: 'dot' | 'line' | 'block' }[]
-    /** 占位说明；说明该图表将在哪个阶段接入 */
-    pendingNote: string
+    /** 占位说明：仅在提供默认占位内容时显示 */
+    pendingNote?: string
     /** 容器内可见的当前状态文字，便于验证交互是否生效 */
     statusText?: string
   }>(),
-  { unit: '', height: '400px', legend: () => [], statusText: '' },
+  { unit: '', height: '400px', legend: () => [], statusText: '', pendingNote: '' },
 )
 </script>
 
@@ -32,6 +32,7 @@ withDefaults(
         <p class="card-subtitle">{{ subtitle }}</p>
       </div>
       <div class="chart-head-right">
+        <slot name="tools" />
         <ul v-if="legend.length" class="chart-legend">
           <li v-for="item in legend" :key="item.label" class="chart-legend-item">
             <span

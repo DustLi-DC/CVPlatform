@@ -28,6 +28,9 @@ const props = defineProps<{
   /** 共现最强的主题（最多 4 个） */
   coTopics: { name: string; weight: number }[]
   papers: DrawerPaperRef[]
+  /** 示例论文是否加载中（阶段 8 起改为请求论文接口） */
+  papersLoading?: boolean
+  papersError?: string
   /** 进入论文列表时保留的筛选条件 */
   listQuery: Record<string, string>
 }>()
@@ -69,7 +72,7 @@ function shareText(): string {
     <aside class="drawer-panel" role="dialog" aria-modal="true" aria-label="关键词相关论文">
       <header class="drawer-header">
         <div>
-          <p class="drawer-eyebrow">关键词相关论文（演示数据）</p>
+          <p class="drawer-eyebrow">关键词相关论文（统计口径：系统关键词 + 当前版本）</p>
           <h3 class="drawer-title">{{ topicName }}</h3>
         </div>
         <button
@@ -111,7 +114,9 @@ function shareText(): string {
             <h4 class="drawer-section-title">示例论文</h4>
             <span class="drawer-hint">点击标题查看详情</span>
           </div>
-          <div class="drawer-papers">
+          <p v-if="papersLoading" class="drawer-empty">正在加载相关论文…</p>
+          <p v-else-if="papersError" class="drawer-empty drawer-error">{{ papersError }}</p>
+          <div v-else class="drawer-papers">
             <RouterLink
               v-for="paper in papers"
               :key="paper.id"
@@ -309,6 +314,10 @@ function shareText(): string {
 .drawer-empty {
   font-size: 12px;
   color: var(--color-text-faint);
+}
+
+.drawer-error {
+  color: var(--color-text-muted);
 }
 
 .drawer-footer {
