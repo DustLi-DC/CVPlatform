@@ -232,6 +232,7 @@ def save_paper(
     primary_source: str = "manual",
     data_status: str = "review",
     source_ref: tuple[str, str] | None = None,
+    retrieved_at: str | None = None,
 ) -> tuple[Paper, bool]:
     """统一的保存逻辑：先去重再写入，返回 (论文, 是否新建)。
 
@@ -306,7 +307,7 @@ def save_paper(
         keyword_status="pending",
         keyword_ruleset_version=None,
         keyword_processed_at=None,
-        retrieved_at=_now(),
+        retrieved_at=retrieved_at or _now(),
         created_at=_now(),
         updated_at=_now(),
     )
@@ -719,3 +720,30 @@ def serialize_authors(raw: str | None) -> list[str]:
 def analysis_title_threshold() -> int:
     """分析集合的最小标题长度，供文档与校验共同引用。"""
     return MIN_ANALYSIS_TITLE_LENGTH
+
+def find_existing_paper(
+    session: Session,
+    *,
+    title: str,
+    conference: str | None = None,
+    year: int | None = None,
+) -> Paper | None:
+    """判断一篇论文是否已在库中（用于「重复」判定）。
+
+    刻意**只做精确匹配**：会议年份已知时按去重键查，否则按归一化标题全等查。
+    不能用模糊/子串匹配——曾经用模糊检索做重复判定，把
+    「DA-VPT: Semantic-Guided Visual Prompt Tuning for Vision Transformers」
+    当成了「Visual Prompt Tuning」的重复，导致一篇独立论文被静默跳过。
+    """
+    normalized = normalize_title(title)
+    if conference and year:
+        # 会议年份已知：只认去重键。**不再退回全库同名查询**，
+        # 否则同名但属于不同会议年份的论文（例如同一题目出现在两个会议索引里）
+        # 会被误判成重复而静默跳过。
+        return find_by_dedup_key(session, build_dedup_key(conference, year, title))
+    if not normalized:
+        return None
+    # 只有会议年份未知时才按标题全等查，作为兜底
+    return session.exec(
+        select(Paper).where(Paper.title_normalized == normalized)
+    ).first()
