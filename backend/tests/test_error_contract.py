@@ -68,4 +68,6 @@ def test_empty_list_response_shape(client):
         "page_size": 8,
         "pages": 1,
         "scope": {"conferences": [], "year_from": None, "year_to": None},
+        # 阶段 8 起回显统计口径约束；普通检索时为 null
+        "stats_mode": None,
     }

@@ -66,6 +66,14 @@ class QueryScope(BaseModel):
     year_to: int | None = None
 
 
+class StatsMode(BaseModel):
+    """来自统计页时实际生效的口径约束，回显给界面显示「统计口径」条件。"""
+
+    keyword_origin: str
+    ruleset_version: str
+    in_analysis_set: bool
+
+
 class PaperPageOut(BaseModel):
     items: list[PaperListItem]
     total: int
@@ -73,6 +81,8 @@ class PaperPageOut(BaseModel):
     page_size: int
     pages: int
     scope: QueryScope
+    # 非统计口径跳转时为 null
+    stats_mode: StatsMode | None = None
 
 
 class PaperCreateIn(BaseModel):

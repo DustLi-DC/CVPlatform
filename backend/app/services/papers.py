@@ -542,6 +542,15 @@ def query_papers(
             )
         conditions.append(Paper.keyword_status == keyword_status)
 
+    def keyword_relation_filters() -> list:
+        """关键词关系上的来源与版本条件，三个关键词类筛选共用。"""
+        filters = []
+        if keyword_origin:
+            filters.append(Keyword.origin == keyword_origin)
+        if ruleset_version:
+            filters.append(PaperKeyword.ruleset_version == ruleset_version)
+        return filters
+
     needle = q.strip()
     if needle:
         lowered = needle.lower()
@@ -574,15 +583,6 @@ def query_papers(
                     Paper.title_normalized.like(f"%{normalized_needle}%")
                 )
             conditions.append(or_(*like_clauses))
-
-    def keyword_relation_filters() -> list:
-        """关键词关系上的来源与版本条件，三个关键词类筛选共用。"""
-        filters = []
-        if keyword_origin:
-            filters.append(Keyword.origin == keyword_origin)
-        if ruleset_version:
-            filters.append(PaperKeyword.ruleset_version == ruleset_version)
-        return filters
 
     if keyword:
         normalized = normalize_keyword(keyword)

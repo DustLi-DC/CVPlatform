@@ -9,7 +9,7 @@ from __future__ import annotations
 from fastapi import APIRouter, Query, status
 from sqlmodel import Session
 
-from ..config import DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE
+from ..config import DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE, load_settings
 from ..db.engine import session_scope
 from ..models.entities import Paper
 from ..schemas.paper import (
@@ -91,9 +91,20 @@ def list_papers(
     year_from: int | None = Query(None, description="起始年份（含）"),
     year_to: int | None = Query(None, description="结束年份（含）"),
     keyword: str | None = Query(None, description="按关键词精确筛选"),
-    topic: str | None = Query(None, description="按主题筛选"),
+    topic: str | None = Query(None, description="按主题筛选（slug 或主题名）"),
     data_status: str | None = Query(None),
     keyword_status: str | None = Query(None),
+    from_stats: bool = Query(
+        False,
+        description="来自统计页的跳转：强制只算系统关键词、只认当前规则版本并限制在分析集合内",
+    ),
+    keyword_origin: str | None = Query(
+        None, description="关键词来源过滤：system（系统提取）/ author（作者关键词）"
+    ),
+    ruleset_version: str | None = Query(None, description="关键词规则版本过滤"),
+    in_analysis_set: bool = Query(
+        False, description="只返回分析集合内的论文（会议年份有效、标题可用、关键词已按当前版本处理完成）"
+    ),
     sort: str = Query(
         "code", description="code / title / year / conference / created_at"
     ),
@@ -105,6 +116,15 @@ def list_papers(
     effective_from = year_from if year_from is not None else year
     effective_to = year_to if year_to is not None else year
 
+    stats_mode = (
+        {
+            "keyword_origin": "system",
+            "ruleset_version": ruleset_version or load_settings().keyword_ruleset_version,
+            "in_analysis_set": True,
+        }
+        if from_stats
+        else None
+    )
     with session_scope() as session:
         result = paper_service.query_papers(
             session,
@@ -117,6 +137,10 @@ def list_papers(
             topic=topic,
             data_status=data_status,
             keyword_status=keyword_status,
+            from_stats=from_stats,
+            keyword_origin=keyword_origin,
+            ruleset_version=ruleset_version,
+            in_analysis_set=in_analysis_set,
             sort=sort,
             order=order,
             page=page,
@@ -141,6 +165,8 @@ def list_papers(
             year_from=effective_from,
             year_to=effective_to,
         ),
+        # 回显本次实际生效的统计约束，前端据此显示「统计口径」条件
+        stats_mode=stats_mode,
     )
 
 
