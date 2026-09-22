@@ -22,7 +22,6 @@ import StatusBadge from '../components/StatusBadge.vue'
 import YearRangeSelect from '../components/YearRangeSelect.vue'
 import { pushToast } from '../composables/useToast'
 import { demoYears } from '../demo/coverage'
-import { demoKeywordOptions } from '../demo/topics'
 import {
   allConferences,
   conferenceColors,
@@ -380,13 +379,19 @@ onMounted(() => {
         />
 
         <div>
-          <label class="field-label" for="kw-filter">关键词</label>
-          <select id="kw-filter" v-model="keywordFilter" class="select">
-            <option value="">全部关键词</option>
-            <option v-for="name in demoKeywordOptions" :key="name" :value="name">
-              {{ name }}
-            </option>
-          </select>
+          <label class="field-label" for="kw-filter">关键词（精确匹配）</label>
+          <input
+            id="kw-filter"
+            v-model="keywordFilter"
+            class="input kw-input"
+            type="text"
+            placeholder="例如：目标检测"
+            @keydown.enter="page = 1"
+          />
+          <p class="field-hint">
+            按关键词精确匹配。可选词表将在阶段 7 由统计接口提供，当前不做固定下拉，
+            避免列出数据中并不存在的词。
+          </p>
         </div>
 
         <div>
@@ -664,6 +669,11 @@ onMounted(() => {
 .sort-controls .select {
   width: auto;
   min-width: 84px;
+}
+
+.kw-input {
+  width: 100%;
+  min-width: 180px;
 }
 
 .result-bar {

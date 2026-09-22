@@ -1,5 +1,8 @@
 <script setup lang="ts">
+import { computed } from 'vue'
 import { RouterLink, useRoute } from 'vue-router'
+
+import type { DataSourceKind } from '../router'
 
 interface NavItem {
   label: string
@@ -21,6 +24,23 @@ function isActive(item: NavItem): boolean {
   if (item.to === '/') return route.path === '/'
   return item.match.some((prefix) => route.path.startsWith(prefix))
 }
+
+/** 每个页面的数据来源提示，取值来自路由 meta，避免与实际实现不一致 */
+const SOURCE_LABELS: Record<DataSourceKind, { badge: string; hint: string; tone: string }> = {
+  api: { badge: '后端数据', hint: '读取数据库中的论文记录', tone: 'badge-ok' },
+  demo: { badge: '演示数据', hint: '尚未接入统计接口', tone: 'badge-warn' },
+  pending: { badge: '接口待接入', hint: '采集与任务接口尚未实现', tone: 'badge-neutral' },
+  static: { badge: '', hint: '', tone: '' },
+}
+
+const source = computed(() => {
+  const value = route.meta.dataSource
+  const kind: DataSourceKind =
+    value === 'api' || value === 'demo' || value === 'pending' || value === 'static'
+      ? value
+      : 'static'
+  return SOURCE_LABELS[kind]
+})
 </script>
 
 <template>
@@ -48,8 +68,8 @@ function isActive(item: NavItem): boolean {
       </nav>
 
       <div class="header-meta">
-        <span class="badge badge-warn">演示数据</span>
-        <span class="header-scope">尚未接入后端接口</span>
+        <span v-if="source.badge" class="badge" :class="source.tone">{{ source.badge }}</span>
+        <span v-if="source.hint" class="header-scope">{{ source.hint }}</span>
       </div>
     </div>
   </header>
