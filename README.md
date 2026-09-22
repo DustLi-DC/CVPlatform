@@ -6,6 +6,9 @@
 面向刚接触计算机视觉的同学：先看榜单与图谱建立整体印象，再顺着热词进入论文列表与详情精读。
 结果只描述「本平台采集到的这个样本」，不等同于整届大会或整个领域的结论。
 
+当前版本 **1.0.0**：仓库带 `1.0.0` 标签，发布包由 `deploy/make_release.sh 1.0.0 [--with-db]`
+在本机生成（`data/release/` 下，已被 Git 忽略）。
+
 ## 五项核心能力
 
 | # | 能力 | 入口 |
@@ -14,7 +17,7 @@
 | 2 | 论文增删改查；本地未命中时联网检索候选 | 论文管理 `/papers`、详情 `/papers/:id` |
 | 3 | Top 10 热门方向（按去重关联论文数） | 热门方向总览 `/` |
 | 4 | 可点击的关键词共现图谱 | 热门方向总览 `/` |
-| 5 | CVPR / ICCV / ECCV 多年热度比较动画 | 热度走势对比 `/trends` |
+| 5 | CVPR / ICCV / ECCV 多年热度比较动画，可导出 GIF | 热度走势对比 `/trends` |
 
 ## 开发环境（本机实测版本）
 
@@ -55,7 +58,7 @@ CVPlatform/
 │   ├── src/
 │   │   ├── api/               # HTTP 请求（health、paperApi、collectApi、importApi、statsApi）
 │   │   ├── components/        # 可复用组件（含 ECharts 图谱与趋势曲线）
-│   │   ├── composables/       # 组合式函数（轻提示、ECharts 按需注册）
+│   │   ├── composables/       # 组合式函数（ECharts 按需注册、年份轴、图表布局常量、GIF 合成与编码）
 │   │   ├── layouts/           # 公共布局
 │   │   ├── router/            # 六个页面路由与数据来源标记
 │   │   ├── styles/            # 设计令牌与公共 UI 样式
@@ -71,7 +74,7 @@ CVPlatform/
 | 路径 | 页面 | 数据来源 |
 |---|---|---|
 | `/` | 热门方向总览 | 后端接口 `/api/stats/{summary,top,graph}`（ECharts 图谱） |
-| `/trends` | 热度走势对比 | 后端接口 `/api/stats/{summary,trend,top}`（ECharts 曲线 + 播放动画） |
+| `/trends` | 热度走势对比 | 后端接口 `/api/stats/{summary,trend,top}`（ECharts 曲线按年份逐段绘制 + 年度 Top 10 演变榜单，两个视图都可导出 GIF） |
 | `/papers` | 论文管理 | 后端接口 `/api/papers`（主题下拉词表来自 `/api/stats/top`） |
 | `/papers/:id` | 论文详情 | 后端接口 `/api/papers/{id}` |
 | `/collect` | 采集与导入 | 后端接口 `/api/collect/*`、`/api/import/*` |
@@ -113,6 +116,9 @@ Linux 服务器上把解释器路径换成 `.venv/bin/python`，其余命令相�
 
 开发默认路径锚定仓库根而不依赖启动时的工作目录，因此在任意目录启动都指向同一个数据库。
 生产配置模板见 `deploy/env.example`，服务与权限说明见 `deploy/README.md`。
+上表只列影响行为的主要开关；完整清单（出站请求的超时/重试/串行间隔、任务续跑开关
+`AUTO_RESUME_TASKS`、由后端托管前端产物的 `CVPLATFORM_SERVE_FRONTEND`、数据集导入的年份下限
+与摘要覆盖率阈值）见 `deploy/env.example`。
 
 ## 启动
 
@@ -155,8 +161,8 @@ npm --prefix frontend run build          # 含 TypeScript 检查，产物在 fro
 - **当前覆盖：13 个会议年份、29,072 篇**（2020 年及以后的 CVPR / ICCV / ECCV 完整论文集）：
   CVPR 2020—2026、ICCV 2021/2023/2025、ECCV 2020/2022/2024。数据集来自
   [ai-conferences](https://huggingface.co/ai-conferences) 的公开镜像，逐届一个数据集，
-  每篇保留官方原文链接，导入时记录数据集修订号；`ECCV 2026` 因摘要覆盖率仅 71%（数据仍在补齐）
-  被自动跳过。
+  每篇保留官方原文链接，导入时记录数据集修订号；`ECCV 2026` 因摘要覆盖率仅 64%（实测 63.7%，
+  数据仍在补齐）被自动跳过。
 - 2020 年以前以及数据集未覆盖的年份仍可用抽样采集（`harvest_cli --run`，每会议年份 200 篇）；
   逐组合的来源、样本量、摘要与关键词情况、去重与缺口见 [数据覆盖与来源.md](数据覆盖与来源.md)。
 
@@ -247,6 +253,8 @@ npm --prefix frontend run build
 
 测试覆盖数据模型与迁移、CRUD 与检索、错误契约、采集与候选确认、批量导入的任务生命周期、
 关键词规则与校准、统计口径（可手算数据集）、主题归并与维护、统计页跳转列表的口径一致性。
+**前端没有单元测试**：组件、图表与动画的正确性靠类型检查、生产构建与浏览器实测把关
+（动画与 GIF 导出在浏览器里量过播放头位移、逐帧曲线像素与解码后的帧数，见提交说明）。
 
 ## 部署
 
@@ -260,6 +268,7 @@ npm --prefix frontend run build
 | `deploy/smoke_check.sh` | 只读冒烟检查：接口、错误契约、口径一致性、子路由与静态资源 |
 | `deploy/make_release.sh` | 在本机打包发布产物（`bash deploy/make_release.sh 1.0.0 [--with-db]`） |
 | `deploy/cvplatform.service.example` | systemd 单元模板（单 worker、只监听 127.0.0.1） |
+| `deploy/user/{bootstrap,install,ctl}.sh` | 无 sudo / 无 systemd / 无 Nginx 的机器上的一键部署（代码与数据放在家目录，后端托管前端）；`bootstrap.sh` 会自动探测环境、按需装 Python 3.12、并处理 80 端口的绑定授权 |
 | `deploy/nginx.conf.example` | Nginx 站点模板（静态目录、`/api/` 代理、history 回退、HTTPS 段） |
 | `deploy/env.example` | 环境变量模板（只列代码真正读取的开关） |
 | `deploy/backup_database.py` | SQLite 在线备份（WAL 下也一致，不用停服务） |
@@ -269,6 +278,8 @@ npm --prefix frontend run build
 **当前线上状态（2026-09-23 更新）**：<http://123.249.79.118> 已部署通过本地验收的业务版本——
 13 个会议年份、29,072 篇真实论文，统计/图谱/趋势均可用；HTTPS 待域名备案后配置。
 本轮实际部署结果、人工执行时踩到的问题与修复见 `deploy/README.md` 第 11 节。
+**线上版本落后于仓库最新提交**：热度走势的动画细化与「导出 GIF」尚未同步到线上，
+按第 4 节更新（`git checkout 1.0.0`）即可，数据与接口契约没有变化。
 
 ```bash
 # 服务器上（Ubuntu 24.04）
@@ -305,9 +316,14 @@ sudo systemctl restart cvplatform.service      # 启动时自动执行未应用�
 
 ## 已知限制
 
-- 样本为抽样（每会议年份 200 篇），占比只表示样本内的相对热度，不等于整届大会的录用比例；
-- 每个会议只有两个年份，趋势曲线的相邻年份线段较少，中间年份按缺失断开（不是「热度为 0」）；
-- 论文列表与新增表单的年份选项仍取自集中管理的演示常量（2022—2025），与当前样本跨度一致，
-  覆盖范围变化时需改为按接口返回的年份轴提供；
+- **数据集未覆盖的年份仍是抽样**（`harvest_cli --run`，每会议年份 200 篇）：这些年份的占比只表示
+  样本内的相对热度，不等于整届大会的录用比例。2020 年及以后的 13 个会议年份是完整论文集，
+  占比即该届录用论文中的比例——接口用 `coverage.coverage_kinds` 与 `full_coverage_years` 区分，
+  界面对这两类数据分述，不用一句「抽样」概括全部；
+- 趋势曲线按会议年份取值：ICCV 只有奇数年、ECCV 只有偶数年，单条曲线的相邻点在时间上相隔两年。
+  「该届不举办」跨过连线、「范围内没采到数据」断开并标注灰区，两者都不是「热度为 0」；
+- 关键词规则版本升级后，旧版本处理过的论文需要重跑（`maintenance_cli process-keywords --force`）；
+  重跑完成前这些论文不进分析分母，界面上单列为「待处理」，不与「失败」混计；
 - 未归类关键词数量较大（长尾），只在界面说明中给出数量，未单独出图；
-- 生产环境的权限、域名与 HTTPS 配置待部署阶段完成。
+- 域名与 HTTPS 尚未配置（当前用公网 IP 联调；域名与备案确定后按 `deploy/nginx.conf.example` 启用）；
+- 前端没有单元测试：组件、图表与动画靠类型检查、生产构建与浏览器实测核对（后端有 243 个测试）。
