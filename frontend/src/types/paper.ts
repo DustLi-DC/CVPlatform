@@ -69,6 +69,13 @@ export interface QueryScope {
   year_to: number | null
 }
 
+/** 统计口径跳转时实际生效的约束（由服务端回显） */
+export interface StatsMode {
+  keyword_origin: string
+  ruleset_version: string
+  in_analysis_set: boolean
+}
+
 export interface PaperPage {
   items: PaperListItem[]
   total: number
@@ -76,6 +83,7 @@ export interface PaperPage {
   page_size: number
   pages: number
   scope: QueryScope
+  stats_mode: StatsMode | null
 }
 
 export type MatchMode = 'fuzzy' | 'exact'
@@ -95,6 +103,11 @@ export interface PaperQuery {
   topic: string
   dataStatus: '' | 'complete' | 'review' | 'failed'
   keywordStatus: '' | KeywordStatus
+  /**
+   * 来自统计页的跳转：后端会强制只算系统关键词、只认当前规则版本并限制在分析集合内，
+   * 使列表条数与统计计数一致（开发设计与验收.md 第 7.5 节）。
+   */
+  fromStats: boolean
   sort: PaperSortField
   order: SortOrder
   page: number

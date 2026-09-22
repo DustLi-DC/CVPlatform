@@ -153,6 +153,8 @@ function toSearchParams(query: PaperQuery): string {
   if (query.topic) params.set('topic', query.topic)
   if (query.dataStatus) params.set('data_status', query.dataStatus)
   if (query.keywordStatus) params.set('keyword_status', query.keywordStatus)
+  // 来自统计页的跳转：让列表与统计口径一致（只算系统关键词、当前版本、分析集合）
+  if (query.fromStats) params.set('from_stats', 'true')
   params.set('sort', query.sort)
   params.set('order', query.order)
   params.set('page', String(query.page))

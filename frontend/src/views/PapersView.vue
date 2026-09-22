@@ -47,6 +47,12 @@ const selectedConferences = ref<Conference[]>([])
 const yearFrom = ref<number | null>(null)
 const yearTo = ref<number | null>(null)
 const keywordFilter = ref('')
+/** 主题筛选（统计页跳转时带过来；普通检索为空） */
+const topicFilter = ref('')
+/** 主题展示名，仅用于条件标签显示（筛选仍用 slug） */
+const topicLabel = ref('')
+/** 是否来自统计页跳转：为 true 时后端强制应用统计口径约束 */
+const fromStats = ref(false)
 const sortField = ref<PaperSortField>('code')
 const sortOrder = ref<SortOrder>('asc')
 const page = ref(1)
@@ -75,7 +81,8 @@ const hasAnyCondition = computed(
     selectedConferences.value.length > 0 ||
     yearFrom.value !== null ||
     yearTo.value !== null ||
-    Boolean(keywordFilter.value),
+    Boolean(keywordFilter.value) ||
+    Boolean(topicFilter.value),
 )
 
 /** 本地未命中：提交过查询但没有任何结果，此时给出联网检索入口的位置 */
@@ -97,6 +104,13 @@ const activeFilters = computed(() => {
     })
   }
   if (keywordFilter.value) chips.push({ key: 'keyword', label: `关键词：${keywordFilter.value}` })
+  if (topicFilter.value) {
+    chips.push({ key: 'topic', label: `主题：${topicLabel.value || topicFilter.value}` })
+  }
+  if (fromStats.value) {
+    // 统计页跳转时列表与统计必须同口径，这一点要在界面上说清
+    chips.push({ key: 'stats', label: '统计口径：系统关键词 · 当前规则版本 · 分析集合' })
+  }
   return chips
 })
 
@@ -108,9 +122,10 @@ function buildQuery(): PaperQuery {
     yearFrom: yearFrom.value,
     yearTo: yearTo.value,
     keyword: keywordFilter.value,
-    topic: '',
+    topic: topicFilter.value,
     dataStatus: '',
     keywordStatus: '',
+    fromStats: fromStats.value,
     sort: sortField.value,
     order: sortOrder.value,
     page: page.value,
@@ -152,6 +167,11 @@ function clearFilter(key: string): void {
     yearTo.value = null
   }
   if (key === 'keyword') keywordFilter.value = ''
+  if (key === 'topic') {
+    topicFilter.value = ''
+    topicLabel.value = ''
+  }
+  if (key === 'stats') fromStats.value = false
   page.value = 1
 }
 
@@ -168,6 +188,9 @@ function resetAll(): void {
   yearFrom.value = null
   yearTo.value = null
   keywordFilter.value = ''
+  topicFilter.value = ''
+  topicLabel.value = ''
+  fromStats.value = false
   sortField.value = 'code'
   sortOrder.value = 'asc'
   page.value = 1
@@ -270,6 +293,14 @@ function applyRouteQuery(params: typeof route.query): void {
   const nextTo = Number.isFinite(to) && to > 0 ? to : null
   if (nextTo !== yearTo.value) yearTo.value = nextTo
 
+  const topic = typeof params.topic === 'string' ? params.topic : ''
+  if (topic !== topicFilter.value) topicFilter.value = topic
+  const topicName = typeof params.topic_name === 'string' ? params.topic_name : ''
+  if (topicName !== topicLabel.value) topicLabel.value = topicName
+
+  const stats = params.from_stats === 'true'
+  if (stats !== fromStats.value) fromStats.value = stats
+
   const q = typeof params.query === 'string' ? params.query : ''
   if (q !== submittedQuery.value) {
     query.value = q
@@ -289,13 +320,18 @@ applyRouteQuery(route.query)
 watch(() => route.query, applyRouteQuery)
 
 // 把当前条件与页码写回地址栏，使详情页返回、刷新与分享都能还原同一视图
-watch([submittedQuery, selectedConferences, yearFrom, yearTo, keywordFilter, page], () => {
+watch(
+  [submittedQuery, selectedConferences, yearFrom, yearTo, keywordFilter, topicFilter, fromStats, page],
+  () => {
   const next: Record<string, string> = {}
   if (submittedQuery.value) next.query = submittedQuery.value
   if (selectedConferences.value.length) next.conf = selectedConferences.value.join(',')
   if (yearFrom.value !== null) next.year_from = String(yearFrom.value)
   if (yearTo.value !== null) next.year_to = String(yearTo.value)
   if (keywordFilter.value) next.kw = keywordFilter.value
+  if (topicFilter.value) next.topic = topicFilter.value
+  if (topicLabel.value) next.topic_name = topicLabel.value
+  if (fromStats.value) next.from_stats = 'true'
   if (page.value > 1) next.page = String(page.value)
 
   const current = route.query
@@ -305,9 +341,13 @@ watch([submittedQuery, selectedConferences, yearFrom, yearTo, keywordFilter, pag
     current.year_from === next.year_from &&
     current.year_to === next.year_to &&
     current.kw === next.kw &&
+    current.topic === next.topic &&
+    current.topic_name === next.topic_name &&
+    (current.from_stats === 'true') === fromStats.value &&
     current.page === next.page
   if (!same) void router.replace({ query: next })
-})
+  },
+)
 
 onMounted(() => {
   void load()
