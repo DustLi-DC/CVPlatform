@@ -125,10 +125,19 @@ log "4/7 安装/更新后端依赖（生产只装 requirements.txt，不装 requ
 if [[ $SKIP_DEPS -eq 1 ]]; then
   echo "  按 --skip-deps 跳过"
 else
-  # -H 让 sudo 切到目标用户的家目录，并把 pip 缓存指到临时目录：
-  # 否则会警告「.cache/pip 不可写」（无害但干扰阅读），且不会污染应用目录
-  run "sudo -H -u cvplatform env PIP_CACHE_DIR=/tmp/cvplatform-pip-cache       $APP_DIR/.venv/bin/pip install --upgrade pip >/dev/null"
-  run "sudo -H -u cvplatform env PIP_CACHE_DIR=/tmp/cvplatform-pip-cache       $APP_DIR/.venv/bin/pip install -r '$APP_DIR/requirements.txt'"
+  # 虚拟环境的属主可能是 root（现网就是这样），此时以 cvplatform 身份装依赖会因权限不足失败。
+  # 先探测 venv 是否对运行用户可写，可写就按运行用户装（保持文件属主一致），
+  # 否则以当前身份（root）装——这是更新依赖时更稳妥的选择。
+  PIP_CACHE="PIP_CACHE_DIR=/tmp/cvplatform-pip-cache"
+  if sudo -u cvplatform test -w "$APP_DIR/.venv/lib" 2>/dev/null; then
+    echo "  虚拟环境对 cvplatform 可写，以其身份安装"
+    run "sudo -H -u cvplatform env $PIP_CACHE $APP_DIR/.venv/bin/pip install --upgrade pip >/dev/null"
+    run "sudo -H -u cvplatform env $PIP_CACHE $APP_DIR/.venv/bin/pip install -r '$APP_DIR/requirements.txt'"
+  else
+    echo "  虚拟环境属主不是 cvplatform（实际属主：$(stat -c '%U' "$APP_DIR/.venv")），以当前身份安装"
+    run "env $PIP_CACHE $APP_DIR/.venv/bin/pip install --upgrade pip >/dev/null"
+    run "env $PIP_CACHE $APP_DIR/.venv/bin/pip install -r '$APP_DIR/requirements.txt'"
+  fi
 fi
 
 log "5/7 数据库：迁移与应用发布包数据（可选）"
@@ -152,6 +161,14 @@ log "6/7 重启服务"
 run "systemctl daemon-reload"
 run "systemctl restart $SERVICE"
 run "sleep 3"
+
+# 重启后先确认服务真的起来了（失败要立刻可见，而不是等到冒烟检查才暴露）
+if ! systemctl is-active --quiet "$SERVICE"; then
+  echo "  !! 服务未处于 active 状态，最近日志："
+  journalctl -u "$SERVICE" -n 30 --no-pager | sed 's/^/    /' || true
+  fail "服务启动失败，请按上面日志排查；代码与数据库已备份，可用脚本输出的回退命令恢复"
+fi
+echo "  服务状态：$(systemctl is-active $SERVICE)"
 
 log "7/7 冒烟检查"
 run "bash '$APP_DIR/deploy/smoke_check.sh'"
